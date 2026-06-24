@@ -14,6 +14,8 @@ import tdsRoutes from './routes/tds'
 import ptRoutes from './routes/ptanalysis'
 import gstRoutes from './routes/gst'
 import complianceRoutes from './routes/compliance'
+import balancesheetRoutes from './routes/balancesheet'
+import cashflowRoutes from './routes/cashflow'
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -34,6 +36,8 @@ app.use('/api/tds-detect', tdsRoutes)
 app.use('/api/pt-analysis', ptRoutes)
 app.use('/api/gst-return', gstRoutes)
 app.use('/api/compliance', complianceRoutes)
+app.use('/api/balance-sheet', balancesheetRoutes)
+app.use('/api/cash-flow', cashflowRoutes)
 
 // Serve React frontend in production
 const BUILD_DIR = path.join(process.cwd(), 'public')

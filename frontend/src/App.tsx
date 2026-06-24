@@ -14,6 +14,8 @@ import TDSAnalysis from './pages/TDSAnalysis'
 import PTAnalysis from './pages/PTAnalysis'
 import GSTReturn from './pages/GSTReturn'
 import Compliance from './pages/Compliance'
+import BalanceSheet from './pages/BalanceSheet'
+import CashFlow from './pages/CashFlow'
 import ComingSoon from './pages/ComingSoon'
 
 function Layout() {
@@ -28,8 +30,8 @@ function Layout() {
           <Route path="/history" element={<History />} />
           <Route path="/fullaudit" element={<FullAudit />} />
           <Route path="/doc-checker" element={<DocChecker />} />
-          <Route path="/balance-sheet" element={<ComingSoon title="Balance Sheet" icon="fa-scale-balanced" />} />
-          <Route path="/cash-flow" element={<ComingSoon title="Cash Flow (AS-3)" icon="fa-water" />} />
+          <Route path="/balance-sheet" element={<BalanceSheet />} />
+          <Route path="/cash-flow" element={<CashFlow />} />
           <Route path="/tds-detect" element={<TDSDetect />} />
           <Route path="/gst-return" element={<GSTReturn />} />
           <Route path="/tds" element={<TDSAnalysis />} />
