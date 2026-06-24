@@ -19,7 +19,9 @@ export async function callModel(system: string, user: string, maxTokens = 300, m
         { role: 'user', content: user },
       ],
     })
-    return resp.choices[0].message.content?.trim() ?? ''
+    const text = resp.choices[0].message.content?.trim() ?? ''
+    // Strip markdown — stars, hashes, bold, italic
+    return text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').replace(/^#+\s*/gm, '').replace(/^[-*]\s+/gm, '').trim()
   } catch (e) {
     console.error('[OpenRouter] error:', e)
     return ''
