@@ -85,6 +85,71 @@ export default function BalanceSheet() {
             <Section title="Liabilities & Equity" data={data.liabilities || {}} color="#C9A84C" />
             <Section title="Assets" data={data.assets || {}} color="#60a5fa" />
           </div>
+          {/* ── DIFFERENCE DIAGNOSIS ── */}
+          {data.diagnosis && (
+            <div style={{ marginBottom: 12 }}>
+              {/* Header */}
+              <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '12px 12px 0 0', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>⚠️</span>
+                <div>
+                  <div style={{ color: '#f87171', fontSize: 13, fontWeight: 700 }}>Balance Sheet Difference — {fmt(data.diagnosis.difference)}</div>
+                  <div style={{ color: '#4A6A8A', fontSize: 11, marginTop: 2 }}>AI has diagnosed the reason and Tally fix steps below</div>
+                </div>
+              </div>
+
+              {/* AI Diagnosis */}
+              <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderLeft: 'none', borderRight: 'none', padding: '14px 16px' }}>
+                <div style={{ color: '#a78bfa', fontSize: 10, fontWeight: 700, marginBottom: 6, letterSpacing: '0.08em' }}>CA AI DIAGNOSIS</div>
+                <div style={{ color: '#e2e8f0', fontSize: 12, lineHeight: 1.8 }}>{data.diagnosis.ai_diagnosis}</div>
+              </div>
+
+              {/* Law */}
+              <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderLeft: 'none', borderRight: 'none', padding: '10px 16px', display: 'flex', gap: 8 }}>
+                <span style={{ color: '#fbbf24', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>LAW</span>
+                <span style={{ color: '#8AA8C0', fontSize: 11, lineHeight: 1.6 }}>{data.diagnosis.law}</span>
+              </div>
+
+              {/* Tally Fix */}
+              <div style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)', borderLeft: 'none', borderRight: 'none', padding: '10px 16px', display: 'flex', gap: 8 }}>
+                <span style={{ color: '#34d399', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>TALLY FIX</span>
+                <span style={{ color: '#8AA8C0', fontSize: 11, lineHeight: 1.6 }}>{data.diagnosis.tally_fix}</span>
+              </div>
+
+              {/* Wrong expense ledgers */}
+              {data.diagnosis.wrong_expenses?.length > 0 && (
+                <div style={{ background: 'var(--navy-800)', border: '1px solid var(--navy-600)', borderLeft: 'none', borderRight: 'none', padding: '10px 16px' }}>
+                  <div style={{ color: '#f87171', fontSize: 10, fontWeight: 700, marginBottom: 8, letterSpacing: '0.08em' }}>GUILTY LEDGERS — MOVE TO "INDIRECT EXPENSES" IN TALLY</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                    {data.diagnosis.wrong_expenses.map((e: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 8, padding: '6px 10px' }}>
+                        <span style={{ color: '#e2e8f0', fontSize: 11 }}>{e.name}</span>
+                        <span style={{ color: '#f87171', fontSize: 11, fontWeight: 600 }}>{fmt(e.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Critic Stamp */}
+              {data.critic_verdict && (
+                <div style={{ background: data.critic_verdict.confirmed ? 'rgba(248,113,113,0.08)' : 'rgba(52,211,153,0.08)', border: `1px solid ${data.critic_verdict.confirmed ? 'rgba(248,113,113,0.25)' : 'rgba(52,211,153,0.25)'}`, borderRadius: '0 0 12px 12px', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 14 }}>{data.critic_verdict.confirmed ? '⚠' : '✓'}</span>
+                    <div>
+                      <div style={{ color: data.critic_verdict.confirmed ? '#f87171' : '#34d399', fontSize: 11, fontWeight: 700 }}>
+                        {data.critic_verdict.confirmed ? 'CONFIRMED RISK' : 'LOW RISK'} — Critic AI Verified · {data.critic_verdict.confidence} confidence
+                      </div>
+                      <div style={{ color: '#4A6A8A', fontSize: 10, marginTop: 2 }}>{data.critic_verdict.reason}</div>
+                    </div>
+                  </div>
+                  {data.critic_verdict.penalty && (
+                    <div style={{ color: '#fbbf24', fontSize: 10, fontWeight: 600, textAlign: 'right', maxWidth: 200 }}>PENALTY: {data.critic_verdict.penalty}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {data.unclassified?.length > 0 && (
             <div style={{ ...card, borderLeft: '3px solid #fbbf24', borderRadius: '0 12px 12px 0' }}>
               <div style={{ color: '#fbbf24', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>⚠️ {data.unclassified.length} ledgers not classified — unknown group</div>

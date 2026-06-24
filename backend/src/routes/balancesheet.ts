@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
-import { callModel } from '../ai/openrouter'
+import { callModel, runCriticAI } from '../ai/openrouter'
 import { parseTallyTrialBalance } from '../engines/tallyParser'
 
 const router = Router()
@@ -138,10 +138,91 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const difference = Math.abs(total_assets - total_liabilities)
   const tallied = difference < 10
 
-  const summary = `Company: ${company}. Period: ${period}. Balance Sheet: Total Assets ${fmt(total_assets)}, Total Liabilities+Equity ${fmt(total_liabilities)}. ${tallied ? 'Tallied.' : `Difference: ${fmt(difference)}.`} Unclassified: ${unclassified.length} ledgers.`
+  // ── AUTO-DIAGNOSE DIFFERENCE ──────────────────────────────────────────────
+  let diagnosis: any = null
+  let critic_verdict: any = null
+
+  if (!tallied && difference > 0) {
+    // Find expense/income ledgers sitting on wrong BS side
+    const EXPENSE_KW = ['rent','salary','wages','commission','food','hotel','travel','telephone',
+      'electricity','printing','stationery','repair','maintenance','advertisement','marketing',
+      'subscription','fee','fees','expense','expenses','petrol','diesel','fuel','misc']
+    const INCOME_KW = ['sales','revenue','income','service income','commission received',
+      'interest received','rent received','dividend','discount received']
+
+    const wrongExpenses = ledgers.filter(l => {
+      const nl = l.name.toLowerCase()
+      return EXPENSE_KW.some(k => nl.includes(k)) && l.debit > 0
+    })
+    const wrongIncomes = ledgers.filter(l => {
+      const nl = l.name.toLowerCase()
+      return INCOME_KW.some(k => nl.includes(k)) && l.credit > 0
+    })
+
+    const wrongExpenseTotal = wrongExpenses.reduce((s, l) => s + l.debit, 0)
+    const wrongIncomeTotal = wrongIncomes.reduce((s, l) => s + l.credit, 0)
+
+    // Transposition check: difference divisible by 9 = likely transposition error
+    const isTransposition = difference % 9 === 0
+    // Duplication check: difference divisible by 2 = likely duplicate entry
+    const isDuplicate = difference % 2 === 0 && !isTransposition
+
+    // Build diagnosis context for AI
+    const diagCtx = `
+Company: ${company} | Period: ${period}
+Balance Sheet Difference: ${fmt(difference)} (Assets ${fmt(total_assets)} vs Liabilities ${fmt(total_liabilities)})
+
+POTENTIAL CAUSES DETECTED:
+1. Expense ledgers found on Balance Sheet (should be in P&L): ${wrongExpenses.length} ledgers totalling ${fmt(wrongExpenseTotal)}
+   Ledgers: ${wrongExpenses.slice(0,10).map(l => `${l.name} (${fmt(l.debit)})`).join(', ')}
+
+2. Income ledgers found on Balance Sheet (should be in P&L): ${wrongIncomes.length} ledgers totalling ${fmt(wrongIncomeTotal)}
+   Ledgers: ${wrongIncomes.slice(0,5).map(l => `${l.name} (${fmt(l.credit)})`).join(', ')}
+
+3. Unclassified ledgers: ${unclassified.length} ledgers totalling ${fmt(unclassified.reduce((s,l) => s + l.balance, 0))}
+   Ledgers: ${unclassified.slice(0,10).map(l => `${l.ledger} (${fmt(l.balance)})`).join(', ')}
+
+4. Arithmetic pattern: ${isTransposition ? 'Difference divisible by 9 — possible transposition error (e.g. ₹16,000 entered as ₹61,000)' : isDuplicate ? 'Difference divisible by 2 — possible duplicate entry' : 'No specific pattern detected'}
+
+Most likely cause: ${wrongExpenses.length > 0 ? `${wrongExpenses.length} expense ledgers (${fmt(wrongExpenseTotal)}) are in Balance Sheet groups instead of Indirect Expenses in Tally` : unclassified.length > 0 ? `${unclassified.length} unclassified ledgers need to be assigned correct groups in Tally` : 'Check for one-sided journal entries or data entry errors'}`
+
+    const aiSystem = `You are a senior Chartered Accountant in India with 20 years of audit experience.
+Answer in plain text only — no markdown, no stars, no bullet symbols.
+You must cite specific Indian accounting law: Schedule III Companies Act 2013, AS-1, AS-2, AS-10, Section 129 Companies Act 2013.
+Give: 1) Most likely reason for the difference 2) Which specific ledgers are causing it 3) Exact fix steps in Tally 4) Legal consequence if not fixed.
+Maximum 5 lines. Plain sentences only.`
+
+    const ai_diagnosis = await callModel(aiSystem, diagCtx, 400)
+
+    // Critic AI verifies the diagnosis
+    const criticFindings = [{
+      type: 'Balance Sheet Difference',
+      detail: `Difference of ${fmt(difference)} in Balance Sheet. ${wrongExpenses.length} expense ledgers (${fmt(wrongExpenseTotal)}) sitting in Balance Sheet groups instead of P&L. Company: ${company}, Period: ${period}.`
+    }]
+    const criticResults = await runCriticAI(criticFindings)
+
+    diagnosis = {
+      difference,
+      wrong_expenses: wrongExpenses.slice(0, 15).map(l => ({ name: l.name, amount: l.debit, group: l.group })),
+      wrong_incomes: wrongIncomes.slice(0, 5).map(l => ({ name: l.name, amount: l.credit, group: l.group })),
+      wrong_expense_total: wrongExpenseTotal,
+      wrong_income_total: wrongIncomeTotal,
+      is_transposition: isTransposition,
+      is_duplicate: isDuplicate,
+      ai_diagnosis,
+      law: 'Schedule III Companies Act 2013 — expenses must appear in Statement of Profit & Loss. Sec 129 Companies Act 2013 — non-compliant financial statements: penalty up to ₹1,00,000 + ₹1,000/day. AS-1 requires consistent accounting policies.',
+      tally_fix: wrongExpenses.length > 0
+        ? `In Tally: Gateway → Accounts Info → Ledgers → Alter → [each expense ledger] → Change Group to "Indirect Expenses" → Save. Then re-export Trial Balance. Do this for: ${wrongExpenses.slice(0,5).map(l => l.name).join(', ')}${wrongExpenses.length > 5 ? ` and ${wrongExpenses.length - 5} more` : ''}.`
+        : 'Review unclassified ledgers and assign correct groups in Tally. Check for one-sided journal entries.'
+    }
+
+    critic_verdict = criticResults[0] ?? null
+  }
+
+  const summary = `Company: ${company}. Period: ${period}. Balance Sheet: Total Assets ${fmt(total_assets)}, Total Liabilities+Equity ${fmt(total_liabilities)}. ${tallied ? 'Tallied perfectly.' : `Difference: ${fmt(difference)}.`} Unclassified: ${unclassified.length} ledgers.`
   const ai_insight = await callModel('You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 2 lines.', summary)
 
-  res.json({ liabilities, assets, total_assets, total_liabilities, difference, tallied, unclassified, ai_insight, company, period })
+  res.json({ liabilities, assets, total_assets, total_liabilities, difference, tallied, unclassified, ai_insight, company, period, diagnosis, critic_verdict })
 })
 
 router.get('/', requireAuth, async (_req, res) => res.json({}))

@@ -234,20 +234,82 @@ export function parseTallyDaybook(buffer: Buffer): DaybookRow[] {
 }
 
 // ── MODULE 1: LEDGER CLASSIFICATION ──────────────────────────────────────────
+const EXPENSE_KEYWORDS = ['rent','salary','wages','commission','food','hotel','travel','conveyance',
+  'telephone','electricity','power','printing','stationery','repair','maintenance','insurance',
+  'advertisement','marketing','postage','freight','discount allowed','donation','subscription',
+  'fee','fees','expense','expenses','audit fee','professional fee','consultant','legal',
+  'petrol','diesel','fuel','vehicle','office expense','admin','general expense','misc']
+
+const INCOME_KEYWORDS = ['sales','revenue','income','service income','consulting income',
+  'commission received','interest received','rent received','dividend','discount received']
+
+const BS_GROUPS = ['fixed assets','current assets','current liabilities','loans (liability)',
+  'capital account','reserves','sundry debtors','sundry creditors','bank accounts',
+  'cash-in-hand','investments','loans & advances','deposits']
+
 function detectLedgerIssues(ledgers: Ledger[]) {
   const findings: any[] = []
+
   for (const l of ledgers) {
     const nl = l.name.toLowerCase()
+    const grp = (l.group || '').toLowerCase()
+
+    // Check known rule patterns first
     for (const rule of LEDGER_RULES) {
       if (rule.patterns.some(p => nl.includes(p))) {
-        if (rule.wrongGroups.some(wg => l.group?.toLowerCase().includes(wg.toLowerCase()))) {
+        if (rule.wrongGroups.some(wg => grp.includes(wg.toLowerCase()))) {
           findings.push({
             severity: rule.severity, ledger: l.name, current_group: l.group,
             correct_group: rule.correctGroup, balance: Math.abs(l.balance), rule: rule.rule,
-            fix: `Gateway → Accounts Info → Ledgers → Alter → ${l.name} → Change Group to ${rule.correctGroup}`,
+            law: 'Schedule III Companies Act 2013 — items must be correctly classified between Balance Sheet and P&L',
+            fix: `Gateway of Tally → Accounts Info → Ledgers → Alter → ${l.name} → Change Group to "${rule.correctGroup}" → Save → Re-export Trial Balance`,
           })
         }
         break
+      }
+    }
+
+    // Detect expenses sitting in Balance Sheet groups (causes BS difference)
+    const isExpense = EXPENSE_KEYWORDS.some(k => nl.includes(k))
+    const inBSGroup = BS_GROUPS.some(g => grp.includes(g))
+    const hasDebitBal = l.debit > 0 && l.balance > 0
+
+    if (isExpense && inBSGroup && hasDebitBal && grp && !grp.includes('advance') && !grp.includes('prepaid')) {
+      // Not already caught by LEDGER_RULES
+      const alreadyCaught = LEDGER_RULES.some(r => r.patterns.some(p => nl.includes(p)))
+      if (!alreadyCaught) {
+        findings.push({
+          severity: 'Critical',
+          ledger: l.name,
+          current_group: l.group,
+          correct_group: 'Indirect Expenses',
+          balance: Math.abs(l.balance),
+          rule: `"${l.name}" is an expense but is classified under Balance Sheet group "${l.group}". This inflates assets and causes Balance Sheet to not tally.`,
+          law: 'Schedule III of Companies Act 2013 — expenses must appear in Statement of Profit & Loss, NOT in Balance Sheet. Sec 129 Companies Act — non-compliant financial statements attract penalty up to ₹1,00,000.',
+          fix: `Gateway of Tally → Accounts Info → Ledgers → Alter → ${l.name} → Change Group from "${l.group}" to "Indirect Expenses" → Save → Re-export Trial Balance`,
+          impact: 'This ledger is causing your Balance Sheet difference. Fixing the group in Tally will resolve the mismatch.'
+        })
+      }
+    }
+
+    // Detect income sitting in Balance Sheet groups
+    const isIncome = INCOME_KEYWORDS.some(k => nl.includes(k))
+    const hasCreditBal = l.credit > 0 && l.balance < 0
+
+    if (isIncome && inBSGroup && hasCreditBal && grp) {
+      const alreadyCaught = LEDGER_RULES.some(r => r.patterns.some(p => nl.includes(p)))
+      if (!alreadyCaught) {
+        findings.push({
+          severity: 'Critical',
+          ledger: l.name,
+          current_group: l.group,
+          correct_group: 'Indirect Incomes',
+          balance: Math.abs(l.balance),
+          rule: `"${l.name}" is income but is classified under Balance Sheet group "${l.group}". This understates liabilities and causes Balance Sheet to not tally.`,
+          law: 'Schedule III of Companies Act 2013 — income must appear in Statement of Profit & Loss. AS-1 (Disclosure of Accounting Policies) requires consistent and correct classification.',
+          fix: `Gateway of Tally → Accounts Info → Ledgers → Alter → ${l.name} → Change Group from "${l.group}" to "Indirect Incomes" → Save → Re-export Trial Balance`,
+          impact: 'This ledger is causing your Balance Sheet difference. Fixing the group in Tally will resolve the mismatch.'
+        })
       }
     }
   }
