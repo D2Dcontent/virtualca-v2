@@ -107,7 +107,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 
   // Use AI-parsed data if cached, else parse now with AI and cache it
   let ledgers: any[], company: string, period: string
-  let aiParsedData: any = meta.parsed_tb
+  // Clear cached parse so fresh AI classification is used
+  let aiParsedData: any = null // always re-classify with new hybrid parser
   if (!aiParsedData) {
     // No cached AI parse — download file and parse with AI now
     const { data: fileData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
@@ -263,6 +264,7 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 
 
 

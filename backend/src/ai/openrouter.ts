@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+﻿import OpenAI from 'openai'
 import * as XLSX from 'xlsx'
 
 const AUDIT_MODEL = 'anthropic/claude-haiku-4-5'
@@ -29,48 +29,33 @@ export async function callModel(system: string, user: string, maxTokens = 300, m
 }
 
 // ── AI TRIAL BALANCE PARSER ───────────────────────────────────────────────────
+// Strategy: code parser extracts amounts (reliable), AI classifies ledgers (smart)
 export async function parseTBWithAI(buffer: Buffer): Promise<{ ledgers: any[]; company: string; period: string }> {
   try {
-    const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][]
+    // Step 1: Code parser gets accurate amounts
+    const { parseTallyTrialBalance } = await import('../engines/tallyParser')
+    const { ledgers: codeLedgers, company, period } = parseTallyTrialBalance(buffer)
 
-    // Convert to plain text rows for AI
-    const textRows = raw.slice(0, 200).map(row =>
-      row.map(c => String(c ?? '').trim()).filter(Boolean).join(' | ')
-    ).filter(Boolean).join('\n')
+    if (!codeLedgers.length) return { company, period, ledgers: [] }
 
-    const system = `You are an expert Indian CA and Tally accounting software specialist.
-You will be given raw rows from a Tally Trial Balance Excel export.
-Your job: parse every ledger and return a JSON array.
+    // Step 2: AI classifies each ledger (name + tally group → Schedule III classification)
+    const ledgerList = codeLedgers.map((l, i) => `${i + 1}. "${l.name}" | Group: "${l.group || 'Unknown'}" | Dr: ${l.debit} | Cr: ${l.credit}`).join('\n')
 
-RULES:
-1. Identify company name (usually in first 3 rows) and period (contains "to" and year)
-2. Group hierarchy: Tally shows group names (like "Capital Account", "Indirect Expenses") followed by ledger names with debit/credit amounts
-3. For each ledger return its name, group (from Tally hierarchy), debit amount, credit amount
-4. Also classify each ledger as per Schedule III Companies Act 2013:
-   - "Asset" = Fixed Assets, Current Assets, Cash, Bank, Debtors, Investments, Loans Given
-   - "Liability" = Capital, Loans Taken, Creditors, Current Liabilities, Duties & Taxes
-   - "Income" = Sales, Revenue, Income, Fees Received, Interest Received
-   - "Expense" = All expense ledgers — Rent, Salary, Commission, Marketing, etc.
-5. Identify the correct_group as per Schedule III (e.g. "Indirect Expenses", "Current Assets", "Trade Payables" etc.)
+    const system = `You are an expert Indian CA. Classify each ledger as per Schedule III Companies Act 2013.
+For EACH ledger return JSON with:
+- "i": index number (1-based, same as input)
+- "classification": exactly one of "Asset", "Liability", "Income", "Expense"
+- "correct_group": the correct Schedule III group name
+- "bs_or_pl": "BS" for Balance Sheet items (Assets/Liabilities), "PL" for P&L items (Income/Expense)
 
-Return ONLY valid JSON in this exact format, no explanation:
-{
-  "company": "company name",
-  "period": "period string",
-  "ledgers": [
-    {
-      "name": "ledger name",
-      "tally_group": "group from Tally",
-      "debit": 12345,
-      "credit": 0,
-      "classification": "Asset|Liability|Income|Expense",
-      "correct_group": "correct Schedule III group",
-      "bs_or_pl": "BS|PL"
-    }
-  ]
-}`
+Classification rules:
+Asset = Cash, Bank, Debtors, Fixed Assets, Investments, Loans Given, Prepaid, Deposits Paid, TDS Receivable, GST Input Credit
+Liability = Capital, Loans Taken, Creditors, Current Liabilities, Duties & Taxes, GST Payable, TDS Payable, Provisions, Advance from Customer
+Income = Sales, Revenue, Service Income, Commission Received, Interest Received, Discount Received
+Expense = Rent, Salary, Commission Paid, Marketing, Utilities, Repairs, Professional Fees, Depreciation, any cost/charge/expense
+
+Return ONLY a JSON array. No explanation.
+[{"i":1,"classification":"Asset","correct_group":"Cash & Bank","bs_or_pl":"BS"},...]`
 
     const client = getClient()
     const resp = await client.chat.completions.create({
@@ -78,28 +63,34 @@ Return ONLY valid JSON in this exact format, no explanation:
       max_tokens: 4000,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: `Parse this Tally Trial Balance:\n\n${textRows}` },
+        { role: 'user', content: `Classify these ${codeLedgers.length} ledgers:\n\n${ledgerList}` },
       ],
     })
 
-    const raw2 = resp.choices[0].message.content?.trim() ?? '{}'
-    const match = raw2.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('No JSON in AI response')
-    const parsed = JSON.parse(match[0])
-    return {
-      company: parsed.company || 'Company',
-      period: parsed.period || 'FY 2025-26',
-      ledgers: (parsed.ledgers || []).map((l: any) => ({
+    const raw2 = resp.choices[0].message.content?.trim() ?? '[]'
+    const match = raw2.match(/\[[\s\S]*\]/)
+    const aiResults: any[] = match ? JSON.parse(match[0]) : []
+
+    // Build lookup by index
+    const aiMap: Record<number, any> = {}
+    aiResults.forEach(r => { if (r.i) aiMap[r.i] = r })
+
+    // Step 3: Merge code amounts + AI classification
+    const ledgers = codeLedgers.map((l, idx) => {
+      const ai = aiMap[idx + 1] || {}
+      return {
         name: l.name,
-        group: l.tally_group || '',
-        debit: Number(l.debit) || 0,
-        credit: Number(l.credit) || 0,
-        balance: (Number(l.debit) || 0) - (Number(l.credit) || 0),
-        classification: l.classification || '',
-        correct_group: l.correct_group || '',
-        bs_or_pl: l.bs_or_pl || 'BS',
-      }))
-    }
+        group: l.group || '',
+        debit: l.debit,
+        credit: l.credit,
+        balance: l.balance,
+        classification: ai.classification || '',
+        correct_group: ai.correct_group || l.group || '',
+        bs_or_pl: ai.bs_or_pl || 'BS',
+      }
+    })
+
+    return { company, period, ledgers }
   } catch (e) {
     console.error('[parseTBWithAI] error:', e)
     return { company: 'Company', period: 'FY 2025-26', ledgers: [] }
@@ -235,3 +226,4 @@ ${context}`
   })
   return resp.choices[0].message.content?.trim() ?? ''
 }
+
