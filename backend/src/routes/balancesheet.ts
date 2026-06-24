@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { callModel } from '../ai/openrouter'
-import * as XLSX from 'xlsx'
+import { parseTallyTrialBalance } from '../engines/tallyParser'
 
 const router = Router()
 
@@ -65,34 +65,27 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
 
   const buf = Buffer.from(await fileData.arrayBuffer())
-  const wb = XLSX.read(buf, { type: 'buffer' })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-  const rows: any[] = XLSX.utils.sheet_to_json(ws)
+  const { ledgers, company, period } = parseTallyTrialBalance(buf)
 
   const liabilities: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const assets: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const unclassified: { ledger: string; group: string; balance: number }[] = []
 
-  rows.forEach(row => {
-    const ledger = String(row.Ledger || row['Ledger Name'] || row['Account'] || row.ledger || '')
-    const group = String(row.Group || row['Group Name'] || row.group || '')
-    const closing = Number(row['Closing Balance'] || row.Closing || row.Balance || row.Credit || row.credit || 0) -
-                    Number(row.Debit || row.debit || 0)
-    if (!ledger || closing === 0) return
-
-    const { side, bucket } = classify(group)
-    const balance = Math.abs(closing)
+  ledgers.forEach(l => {
+    const { side, bucket } = classify(l.group)
+    const balance = Math.abs(l.balance)
+    if (!balance) return
 
     if (side === 'liability') {
       if (!liabilities[bucket]) liabilities[bucket] = { total: 0, items: [] }
       liabilities[bucket].total += balance
-      liabilities[bucket].items.push({ ledger, balance })
+      liabilities[bucket].items.push({ ledger: l.name, balance })
     } else if (side === 'asset') {
       if (!assets[bucket]) assets[bucket] = { total: 0, items: [] }
       assets[bucket].total += balance
-      assets[bucket].items.push({ ledger, balance })
-    } else if (ledger && balance > 0) {
-      unclassified.push({ ledger, group, balance })
+      assets[bucket].items.push({ ledger: l.name, balance })
+    } else if (balance > 0) {
+      unclassified.push({ ledger: l.name, group: l.group, balance })
     }
   })
 
@@ -101,10 +94,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const difference = Math.abs(total_assets - total_liabilities)
   const tallied = difference < 10
 
-  const summary = `Balance Sheet: Total Assets ${fmt(total_assets)}, Total Liabilities+Equity ${fmt(total_liabilities)}. ${tallied ? 'Tallied.' : `Difference: ${fmt(difference)}.`} Unclassified: ${unclassified.length} ledgers.`
-  const ai_insight = await callModel('You are a CA. Summarize this Balance Sheet in 2 lines with key financial health observations.', summary)
+  const summary = `Company: ${company}. Period: ${period}. Balance Sheet: Total Assets ${fmt(total_assets)}, Total Liabilities+Equity ${fmt(total_liabilities)}. ${tallied ? 'Tallied.' : `Difference: ${fmt(difference)}.`} Unclassified: ${unclassified.length} ledgers.`
+  const ai_insight = await callModel('You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 2 lines.', summary)
 
-  res.json({ liabilities, assets, total_assets, total_liabilities, difference, tallied, unclassified, ai_insight })
+  res.json({ liabilities, assets, total_assets, total_liabilities, difference, tallied, unclassified, ai_insight, company, period })
 })
 
 router.get('/', requireAuth, async (_req, res) => res.json({}))

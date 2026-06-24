@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { callModel } from '../ai/openrouter'
-import * as XLSX from 'xlsx'
+import { parseTallyTrialBalance } from '../engines/tallyParser'
 
 const router = Router()
 
@@ -27,19 +27,15 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
 
   const buf = Buffer.from(await fileData.arrayBuffer())
-  const wb = XLSX.read(buf, { type: 'buffer' })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-  const rows: any[] = XLSX.utils.sheet_to_json(ws)
+  const { ledgers } = parseTallyTrialBalance(buf)
 
   const ledgerTotals: Record<string, { total: number; hasTDS: boolean }> = {}
-  rows.forEach(row => {
-    const ledger = String(row.Ledger || row['Ledger Name'] || row.ledger || '')
-    const amount = Number(row.Amount || row.Debit || row.debit || 0)
-    if (!ledger || amount <= 0) return
-    if (!ledgerTotals[ledger]) ledgerTotals[ledger] = { total: 0, hasTDS: false }
-    ledgerTotals[ledger].total += amount
-    if (/tds|tax deducted/i.test(ledger)) {
-      const parent = Object.keys(ledgerTotals).find(k => k !== ledger)
+  ledgers.forEach(l => {
+    if (l.debit <= 0) return
+    if (!ledgerTotals[l.name]) ledgerTotals[l.name] = { total: 0, hasTDS: false }
+    ledgerTotals[l.name].total += l.debit
+    if (/tds|tax deducted/i.test(l.name)) {
+      const parent = Object.keys(ledgerTotals).find(k => k !== l.name)
       if (parent) ledgerTotals[parent].hasTDS = true
     }
   })
@@ -63,7 +59,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const total_interest = missed.reduce((s, i) => s + i.interest_est, 0)
 
   const summary = `${missed.length} missed TDS deductions. Total exposure: ${fmt(total_exposure)}. Interest: ${fmt(total_interest)}.`
-  const ai_insight = await callModel('You are a CA. Summarize this TDS scan in 2 lines with action items.', summary)
+  const ai_insight = await callModel('You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 2 lines.', summary)
 
   res.json({ items, missed_count: missed.length, total_exposure, total_interest, ai_insight })
 })
