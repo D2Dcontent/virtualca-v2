@@ -1,4 +1,4 @@
-import { Router } from 'express'
+﻿import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { callModel, runCriticAI } from '../ai/openrouter'
@@ -105,11 +105,23 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const meta = metaRow?.meta ?? {}
   if (!meta.trial_balance_path) return res.status(400).json({ error: 'Upload Trial Balance first' })
 
-  const { data: fileData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
-  if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
-
-  const buf = Buffer.from(await fileData.arrayBuffer())
-  const { ledgers, company, period } = parseTallyTrialBalance(buf)
+  // Use AI-parsed data if available, else fall back to code parser
+  let ledgers: any[], company: string, period: string
+  if (meta.parsed_tb) {
+    ledgers = (meta.parsed_tb.ledgers || []).map((l: any) => ({
+      name: l.name, group: l.group || '',
+      debit: Number(l.debit) || 0, credit: Number(l.credit) || 0,
+      balance: Number(l.balance ?? (l.debit - l.credit)) || 0,
+    }))
+    company = meta.parsed_tb.company || 'Company'
+    period = meta.parsed_tb.period || 'FY 2025-26'
+  } else {
+    const { data: fileData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
+    if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
+    const buf = Buffer.from(await fileData.arrayBuffer())
+    const parsed = parseTallyTrialBalance(buf)
+    ledgers = parsed.ledgers; company = parsed.company; period = parsed.period
+  }
 
   const liabilities: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const assets: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
@@ -228,3 +240,4 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { uploadAPI, auditAPI } from '../api'
 
 interface AuditResult {
@@ -23,12 +23,18 @@ const sevColor = (s: string) => s === 'Critical' ? '#ef4444' : s === 'Important'
 const sevBg = (s: string) => s === 'Critical' ? 'rgba(239,68,68,0.08)' : s === 'Important' ? 'rgba(249,115,22,0.08)' : s === 'Review' ? 'rgba(96,165,250,0.08)' : 'rgba(52,211,153,0.08)'
 
 // Timeline finding card
-function Finding({ dot, title, badge, issue, law, penalty, action, stamp, children }: {
+function Finding({ dot, title, badge, issue, law, penalty, action, stamp, fixThis, children }: {
   dot: string; title: string; badge?: string; issue: string;
   law?: string; penalty?: string; action?: string;
   stamp?: { confirmed: boolean; confidence: string; reason: string }
+  fixThis?: string
   children?: React.ReactNode
 }) {
+  const openFix = () => {
+    if (!fixThis) return
+    const encoded = encodeURIComponent(fixThis)
+    window.open(`/askca?issue=${encoded}`, '_blank')
+  }
   return (
     <div style={{ display: 'flex', gap: 14, padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
       {/* Timeline dot */}
@@ -38,9 +44,10 @@ function Finding({ dot, title, badge, issue, law, penalty, action, stamp, childr
       </div>
       {/* Content */}
       <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
           <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: 14 }}>{title}</span>
           {badge && <span style={{ background: 'rgba(201,168,76,0.15)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.3)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99 }}>{badge}</span>}
+          {fixThis && <button onClick={openFix} style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px', background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Fix This →</button>}
         </div>
         <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>{issue}</div>
 
@@ -121,6 +128,7 @@ export default function QuickAudit() {
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState<AuditResult | null>(null)
+  const [invoiceStates, setInvoiceStates] = useState<Record<string, boolean | null>>({})
 
   useEffect(() => {
     auditAPI.result().then(r => { if (r.data?.summary) setResults(r.data) }).catch(() => {})
@@ -140,7 +148,7 @@ export default function QuickAudit() {
   }
 
   const runAudit = useCallback(async () => {
-    setLoading(true); setProgress(0); setResults(null)
+    setLoading(true); setProgress(0); setResults(null); setInvoiceStates({})
     const iv = setInterval(() => setProgress(p => Math.min(p + 3, 800)), 800)
     try {
       const r = await auditAPI.run()
@@ -252,6 +260,7 @@ export default function QuickAudit() {
                   law={`Sec ${t.section} Income Tax Act — ${t.description || 'TDS applicable'} @ ${t.rate}%`}
                   penalty={`Interest @ 1.5%/month u/s 201(1A) for non-deduction. Penalty equal to TDS amount u/s 271C.`}
                   action={`Deduct TDS ${fmt(t.tds_expected)}, deposit via challan 281, file TDS return in Form 26Q.`}
+                  fixThis={`TDS issue for ${t.party}: Total paid ₹${Number(t.total_paid||0).toLocaleString('en-IN')}, TDS of ₹${t.tds_expected?.toLocaleString('en-IN')} not deducted under Sec ${t.section} @ ${t.rate}%. What is the penalty and exact steps to fix this?`}
                   stamp={critic ? { confirmed: critic.confirmed, confidence: critic.confidence, reason: critic.reason } : undefined}
                 >
                   <div style={{ display: 'flex', gap: 20, marginBottom: 4 }}>
@@ -279,12 +288,27 @@ export default function QuickAudit() {
                   law={v.law || `Sec ${v.section} Income Tax Act`}
                   penalty={`Penalty 100% of transaction amount = ${fmt(v.amount)} u/s ${v.section === '269ST' ? '271DA' : '271D'}`}
                   action={`Reverse cash transaction. Use banking channel (NEFT/RTGS/cheque) for payments above ₹${v.section === '269ST' ? '2,00,000' : '10,000'}.`}
+                  fixThis={`Cash violation Sec ${v.section}: ${v.party}, ₹${v.amount?.toLocaleString('en-IN')} on ${v.date}. Penalty = 100% of amount. What are my options to resolve this? Can we reverse or regularise it?`}
                   stamp={critic ? { confirmed: critic.confirmed, confidence: critic.confidence, reason: critic.reason } : undefined}
                 >
                   <div style={{ display: 'flex', gap: 20, marginBottom: 4 }}>
                     <div><div style={{ color: '#64748b', fontSize: 10, fontWeight: 600 }}>DATE</div><div style={{ color: '#f1f5f9', fontWeight: 600, fontSize: 13 }}>{v.date}</div></div>
                     <div><div style={{ color: '#64748b', fontSize: 10, fontWeight: 600 }}>AMOUNT</div><div style={{ color: '#f87171', fontWeight: 700, fontSize: 14 }}>{fmt(v.amount)}</div></div>
                   </div>
+                  {/* Invoice checkbox for cash violations */}
+                  {invoiceStates[`cash_${i}`] === true ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8, marginTop: 6 }}>
+                      <span style={{ color: '#34d399', fontWeight: 700, fontSize: 12 }}>✓ Acknowledged</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <button onClick={() => setInvoiceStates(s => ({ ...s, [`cash_${i}`]: true }))} style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8, cursor: 'pointer' }}>✓ I have proof / it was banked</button>
+                      <button onClick={() => setInvoiceStates(s => ({ ...s, [`cash_${i}`]: false }))} style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(248,113,113,0.1)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, cursor: 'pointer' }}>✗ Cash was used</button>
+                    </div>
+                  )}
+                  {invoiceStates[`cash_${i}`] === false && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#f87171' }}>This is a genuine violation — consult a CA immediately to regularise.</div>
+                  )}
                 </Finding>
               )
             })}
@@ -305,6 +329,7 @@ export default function QuickAudit() {
                   law={o.law}
                   penalty={o.severity === 'Critical' ? 'Qualifies as audit qualification. Affects financial statements under AS 1.' : undefined}
                   action={`Investigate and clear this balance before year-end closing.`}
+                  fixThis={`Outstanding balance issue: ${o.ledger}, balance ₹${o.balance?.toLocaleString('en-IN')}. ${o.issue} How do I investigate and clear this?`}
                   stamp={critic ? { confirmed: critic.confirmed, confidence: critic.confidence, reason: critic.reason } : undefined}
                 >
                   {o.amount > 0 && <div style={{ marginBottom: 4 }}><div style={{ color: '#64748b', fontSize: 10, fontWeight: 600 }}>BALANCE</div><div style={{ color: sevColor(o.severity), fontWeight: 700, fontSize: 14 }}>{fmt(o.amount)}</div></div>}
@@ -347,6 +372,7 @@ export default function QuickAudit() {
                   law={s.law}
                   penalty={s.impact}
                   action={s.action}
+                  fixThis={`Salary/PF/PT compliance issue: ${s.issue} What is the penalty and exact steps to fix this in India?`}
                   stamp={critic ? { confirmed: critic.confirmed, confidence: critic.confidence, reason: critic.reason } : undefined}
                 />
               )
@@ -365,11 +391,26 @@ export default function QuickAudit() {
                 issue={`Payment of ${fmt(e.amount)} on ${e.date}. Verify supporting bill and check TDS applicability.`}
                 law="Sec 40A(3) — cash payments above ₹10,000 disallowed. Check TDS under relevant section."
                 action="Obtain invoice/bill. Check if TDS deductible. Ensure payment via bank if cash."
+                fixThis={`Large payment of ₹${e.amount?.toLocaleString('en-IN')} to ${e.party} on ${e.date}. Do I need to deduct TDS? What are the compliance requirements and what documents should I have?`}
               >
                 <div style={{ display: 'flex', gap: 20, marginBottom: 4 }}>
                   <div><div style={{ color: '#64748b', fontSize: 10, fontWeight: 600 }}>DATE</div><div style={{ color: '#f1f5f9', fontWeight: 600, fontSize: 13 }}>{e.date}</div></div>
                   <div><div style={{ color: '#64748b', fontSize: 10, fontWeight: 600 }}>AMOUNT</div><div style={{ color: '#fbbf24', fontWeight: 700, fontSize: 14 }}>{fmt(e.amount)}</div></div>
                 </div>
+                {/* Invoice checkbox */}
+                {invoiceStates[`exp_${i}`] === true ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8, marginTop: 6 }}>
+                    <span style={{ color: '#34d399', fontWeight: 700, fontSize: 12 }}>✓ Invoice on file</span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <button onClick={() => setInvoiceStates(s => ({ ...s, [`exp_${i}`]: true }))} style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8, cursor: 'pointer' }}>✓ I have Invoice</button>
+                    <button onClick={() => setInvoiceStates(s => ({ ...s, [`exp_${i}`]: false }))} style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(248,113,113,0.1)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, cursor: 'pointer' }}>✗ No Invoice</button>
+                  </div>
+                )}
+                {invoiceStates[`exp_${i}`] === false && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#f87171' }}>No invoice — this expense may be disallowed u/s 37 IT Act. Obtain bill urgently.</div>
+                )}
               </Finding>
             ))}
           </Section>
@@ -433,3 +474,8 @@ export default function QuickAudit() {
     </div>
   )
 }
+
+
+
+
+

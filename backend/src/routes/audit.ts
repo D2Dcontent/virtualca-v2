@@ -1,7 +1,7 @@
-import { Router } from 'express'
+﻿import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
-import { runAudit } from '../engines/auditEngine'
+import { runAuditFromParsed, runAudit } from '../engines/auditEngine'
 import { callModel, runCriticAI, CriticVerdict } from '../ai/openrouter'
 
 const router = Router()
@@ -10,50 +10,41 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const cid = req.companyId!
   const sb = getClient()
 
-  // Load file paths from meta
   const { data: metaRow } = await sb.from('files_meta').select('meta').eq('company_id', cid).single()
   const meta = metaRow?.meta ?? {}
 
-  // Need at least one file
   if (!meta.trial_balance_path && !meta.daybook_path) return res.status(400).json({ error: 'Trial balance file not uploaded' })
 
-  // Download daybook for transaction-level checks (cash, TDS, large expenses)
-  // Fall back to trial balance if no daybook
-  let daybookBuffer: Buffer | null = null
-  let tbBuffer: Buffer | null = null
-
-  if (meta.daybook_path) {
-    const { data: dbData } = await sb.storage.from(BUCKET).download(meta.daybook_path)
-    if (dbData) daybookBuffer = Buffer.from(await dbData.arrayBuffer())
+  // If we have AI-parsed data, use it — otherwise fall back to raw Excel
+  let result: any
+  if (meta.parsed_tb) {
+    result = runAuditFromParsed(meta.parsed_tb, meta.parsed_daybook ?? null)
+  } else {
+    // Legacy: download raw files and parse with code parser
+    let daybookBuffer: Buffer | null = null
+    let tbBuffer: Buffer | null = null
+    if (meta.daybook_path) {
+      const { data: dbData } = await sb.storage.from(BUCKET).download(meta.daybook_path)
+      if (dbData) daybookBuffer = Buffer.from(await dbData.arrayBuffer())
+    }
+    if (meta.trial_balance_path) {
+      const { data: tbData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
+      if (tbData) tbBuffer = Buffer.from(await tbData.arrayBuffer())
+    }
+    const primaryBuffer = daybookBuffer ?? tbBuffer
+    if (!primaryBuffer) return res.status(500).json({ error: 'Could not load uploaded files' })
+    result = runAudit(primaryBuffer, tbBuffer, meta.company_name ?? '', meta.period ?? '')
   }
-  if (meta.trial_balance_path) {
-    const { data: tbData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
-    if (tbData) tbBuffer = Buffer.from(await tbData.arrayBuffer())
-  }
 
-  // Use daybook for transactions; fall back to trial balance if no daybook
-  const primaryBuffer = daybookBuffer ?? tbBuffer
-  if (!primaryBuffer) return res.status(500).json({ error: 'Could not load uploaded files' })
-
-  // Run audit engine (primary = daybook or TB, secondary = TB for balance checks)
-  const result = runAudit(primaryBuffer, tbBuffer, meta.company_name ?? '', meta.period ?? '')
-
-  // Generate AI insight
-  const aiPrompt = `You are a senior CA in India. Answer in plain text only, no markdown, no stars.
-Maximum 3 lines. Plain sentences. Use Rs. for amounts.`
-  const aiData = `Company: ${result.summary.company}
-Score: ${result.summary.score}/100
-Critical: ${result.summary.critical} | Warnings: ${result.summary.warnings} | Questions: ${result.summary.questions}
-Give a 3-line audit summary with top risk and urgent action.`
-
+  const aiPrompt = `You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 3 lines. Plain sentences. Use Rs. for amounts.`
+  const aiData = `Company: ${result.summary.company}\nScore: ${result.summary.score}/100\nCritical: ${result.summary.critical} | Warnings: ${result.summary.warnings} | Questions: ${result.summary.questions}\nGive a 3-line audit summary with top risk and urgent action.`
   result.ai_insight = await callModel(aiPrompt, aiData, 200)
 
-  // === CRITIC AI — verify critical findings ===
   const criticsInput: { type: string; detail: string }[] = [
-    ...result.cash_violations.map(v => ({ type: 'Cash Violation', detail: `Party: ${v.party}, Amount: Rs.${v.amount}, Section: ${v.section}` })),
-    ...result.tds_compliance.map(t => ({ type: 'TDS Issue', detail: t.issue })),
-    ...result.outstanding.filter(o => o.severity === 'Critical').map(o => ({ type: 'Outstanding', detail: o.issue })),
-    ...result.salary_compliance.filter(s => s.severity === 'Critical').map(s => ({ type: 'Salary/PT', detail: s.issue })),
+    ...result.cash_violations.map((v: any) => ({ type: 'Cash Violation', detail: `Party: ${v.party}, Amount: Rs.${v.amount}, Section: ${v.section}` })),
+    ...result.tds_compliance.map((t: any) => ({ type: 'TDS Issue', detail: t.issue })),
+    ...result.outstanding.filter((o: any) => o.severity === 'Critical').map((o: any) => ({ type: 'Outstanding', detail: o.issue })),
+    ...result.salary_compliance.filter((s: any) => s.severity === 'Critical').map((s: any) => ({ type: 'Salary/PT', detail: s.issue })),
   ]
 
   let critic_review: (CriticVerdict & { type: string; detail: string; confirmed_critical: boolean })[] = []
@@ -64,8 +55,6 @@ Give a 3-line audit summary with top risk and urgent action.`
       ...(verdicts[i] ?? { confirmed: true, confidence: 'low', reason: '', penalty: '', action: '' }),
       confirmed_critical: verdicts[i]?.confirmed ?? true,
     }))
-
-    // Adjust score: rejected findings don't count as critical
     const falsePositives = critic_review.filter(c => !c.confirmed_critical).length
     if (falsePositives > 0) {
       result.summary.critical = Math.max(0, result.summary.critical - falsePositives)
@@ -74,7 +63,6 @@ Give a 3-line audit summary with top risk and urgent action.`
   }
   ;(result as any).critic_review = critic_review
 
-  // Save to Supabase
   const { data: existing } = await sb.from('audit_result').select('id').eq('company_id', cid).single()
   if (existing) {
     await sb.from('audit_result').update({ result, audited_at: new Date().toISOString() }).eq('company_id', cid)
@@ -82,7 +70,6 @@ Give a 3-line audit summary with top risk and urgent action.`
     await sb.from('audit_result').insert({ company_id: cid, result, audited_at: new Date().toISOString() })
   }
 
-  // Save history
   await sb.from('audit_history').insert({
     company_id: cid,
     audited_at: new Date().toISOString(),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { auditAPI, askCAAPI } from '../api'
 
 interface Message { role: 'user' | 'ai'; text: string }
@@ -37,8 +37,40 @@ export default function AskCA() {
 
   useEffect(() => {
     auditAPI.result().then(r => {
-      if (r.data?.summary) setIssues(buildIssues(r.data))
-      else setMessages([{ role: 'ai', text: 'No audit data found. Please run a Quick Audit first, then come back here.' }])
+      if (r.data?.summary) {
+        const list = buildIssues(r.data)
+        setIssues(list)
+        // Auto-select issue from URL param ?issue=...
+        const params = new URLSearchParams(window.location.search)
+        const issueParam = params.get('issue')
+        if (issueParam) {
+          // Find best matching issue or create synthetic one
+          const match = list.find(i => i.title.toLowerCase().includes(issueParam.toLowerCase()) || issueParam.toLowerCase().includes(i.title.toLowerCase()))
+          if (match) {
+            setSelected(match)
+            const autoQ = `Explain this issue in detail and tell me exactly what to do: ${issueParam}`
+            setMessages([{ role: 'user', text: autoQ }])
+            setLoading(true)
+            askCAAPI.chat(autoQ, match.context, []).then(resp => {
+              setMessages(prev => [...prev, { role: 'ai', text: resp.data.reply || 'No response.' }])
+              setLoading(false)
+            }).catch(() => { setLoading(false) })
+          } else {
+            // Synthetic issue from URL
+            const synthetic: Issue = { id: 'url_issue', title: issueParam, category: 'Issue', severity: 'Warning', context: issueParam }
+            setSelected(synthetic)
+            const autoQ = `Explain this audit issue and tell me exactly what to do to fix it:\n\n${issueParam}`
+            setMessages([{ role: 'user', text: autoQ }])
+            setLoading(true)
+            askCAAPI.chat(autoQ, issueParam, []).then(resp => {
+              setMessages(prev => [...prev, { role: 'ai', text: resp.data.reply || 'No response.' }])
+              setLoading(false)
+            }).catch(() => { setLoading(false) })
+          }
+        }
+      } else {
+        setMessages([{ role: 'ai', text: 'No audit data found. Please run a Quick Audit first, then come back here.' }])
+      }
     }).catch(() => {
       setMessages([{ role: 'ai', text: 'No audit data found. Please run a Quick Audit first.' }])
     })
@@ -140,3 +172,4 @@ export default function AskCA() {
     </div>
   )
 }
+

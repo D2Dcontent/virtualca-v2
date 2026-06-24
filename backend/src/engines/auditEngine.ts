@@ -777,3 +777,49 @@ export function runAudit(primaryBuffer: Buffer, tbBuffer: Buffer | null = null, 
     ...(partial as Omit<AuditResult, 'summary'>),
   }
 }
+
+// ── ENTRY POINT FROM AI-PARSED DATA ──────────────────────────────────────────
+// Called when parsed_tb / parsed_daybook are already in Supabase (no re-parsing)
+export function runAuditFromParsed(parsedTB: { ledgers: Ledger[]; company: string; period: string }, parsedDaybook: DaybookRow[] | null): AuditResult {
+  const ledgers = (parsedTB.ledgers || []).map(l => ({
+    name: l.name,
+    group: l.group || '',
+    debit: Number(l.debit) || 0,
+    credit: Number(l.credit) || 0,
+    balance: Number((l as any).balance ?? l.debit - l.credit) || 0,
+  }))
+  const daybook: DaybookRow[] = (parsedDaybook || []).map((r: any) => ({
+    date: r.date || '',
+    particulars: r.particulars || '',
+    vchType: r.vchType || '',
+    vchNo: String(r.vchNo || ''),
+    debit: Number(r.debit) || 0,
+    credit: Number(r.credit) || 0,
+    vid: Number(r.vid) || 0,
+  }))
+
+  const partial: Partial<AuditResult> = {
+    ledger_classification: detectLedgerIssues(ledgers),
+    outstanding: detectOutstanding(ledgers),
+    cash_violations: detectCashViolations(daybook),
+    tds_compliance: detectTDS(ledgers, daybook),
+    loans: detectLoans(ledgers, daybook),
+    large_expenses: detectLargeExpenses(daybook),
+    bank_accounts: detectBankAccounts(ledgers, daybook),
+    salary_compliance: detectSalaryCompliance(ledgers, daybook),
+    fixed_assets: detectFixedAssets(ledgers),
+  }
+
+  const { score, critical, warnings, questions } = computeScore(partial)
+
+  return {
+    summary: {
+      company: parsedTB.company || 'Company',
+      period: parsedTB.period || 'FY 2025-26',
+      score, critical, warnings, questions,
+      total_ledgers: ledgers.length,
+      total_vouchers: daybook.length,
+    },
+    ...(partial as Omit<AuditResult, 'summary'>),
+  }
+}
