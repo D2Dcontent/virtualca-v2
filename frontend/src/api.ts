@@ -43,4 +43,9 @@ export const dashboardAPI = {
   get: () => API.get('/api/dashboard'),
 }
 
+export const docCheckerAPI = {
+  run: () => API.post('/api/doc-checker'),
+  get: () => API.get('/api/doc-checker'),
+}
+
 export default API

@@ -6,6 +6,9 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import QuickAudit from './pages/QuickAudit'
 import AskCA from './pages/AskCA'
+import History from './pages/History'
+import FullAudit from './pages/FullAudit'
+import DocChecker from './pages/DocChecker'
 import ComingSoon from './pages/ComingSoon'
 
 function Layout() {
@@ -17,9 +20,9 @@ function Layout() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/quickaudit" element={<QuickAudit />} />
           <Route path="/askca" element={<AskCA />} />
-          <Route path="/history" element={<ComingSoon title="History" icon="fa-clock-rotate-left" />} />
-          <Route path="/fullaudit" element={<ComingSoon title="Full Audit" icon="fa-clipboard-check" />} />
-          <Route path="/doc-checker" element={<ComingSoon title="Missing Docs" icon="fa-file-circle-exclamation" />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/fullaudit" element={<FullAudit />} />
+          <Route path="/doc-checker" element={<DocChecker />} />
           <Route path="/balance-sheet" element={<ComingSoon title="Balance Sheet" icon="fa-scale-balanced" />} />
           <Route path="/cash-flow" element={<ComingSoon title="Cash Flow (AS-3)" icon="fa-water" />} />
           <Route path="/tds-detect" element={<ComingSoon title="TDS Detector" icon="fa-triangle-exclamation" />} />
