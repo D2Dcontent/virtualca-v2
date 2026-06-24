@@ -29,14 +29,57 @@ export default function SharesPnL() {
   return (
     <div style={{ padding: 20 }}>
       {!data && !loading && (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>📈</div>
-          <div style={{ color: '#F5F0E6', fontWeight: 600, marginBottom: 6 }}>Shares & Mutual Funds P&L</div>
-          <div style={{ color: '#4A6A8A', fontSize: 13, marginBottom: 20 }}>FIFO method · STCG/LTCG auto-classified · tax impact</div>
-          <button onClick={run} style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: 10, padding: '12px 28px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-            Calculate P&L
-          </button>
-          {error && <div style={{ color: '#f87171', marginTop: 12, fontSize: 12 }}>{error}</div>}
+        <div style={{ padding: '20px 0' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>📈</div>
+            <div style={{ color: '#F5F0E6', fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Shares & Mutual Funds P&L</div>
+            <div style={{ color: '#4A6A8A', fontSize: 13 }}>FIFO method · STCG/LTCG auto-classified · tax impact</div>
+          </div>
+
+          {/* How it works */}
+          <div style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 14, padding: 20, marginBottom: 16 }}>
+            <div style={{ color: '#C9A84C', fontSize: 12, fontWeight: 700, marginBottom: 12 }}>HOW THIS WORKS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                ['1', 'Upload your Tally Daybook', 'Go to Quick Audit → Upload Daybook. The daybook must contain share buy/sell entries with scrip names in the narration.'],
+                ['2', 'Click Calculate P&L', 'App reads all buy and sell transactions from your daybook, matches them using FIFO method, and calculates STCG/LTCG automatically.'],
+                ['3', 'Get ITR-ready summary', 'Shows Schedule CG figures you can directly enter in ITR-2 or give to your CA.'],
+              ].map(([num, title, desc]) => (
+                <div key={num} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(201,168,76,0.2)', color: '#C9A84C', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{num}</div>
+                  <div>
+                    <div style={{ color: '#F5F0E6', fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                    <div style={{ color: '#4A6A8A', fontSize: 11, lineHeight: 1.6 }}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* What your daybook should have */}
+          <div style={{ background: 'var(--navy-800)', border: '1px solid var(--navy-600)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+            <div style={{ color: '#8AA8C0', fontSize: 11, fontWeight: 700, marginBottom: 10 }}>TALLY DAYBOOK ENTRY EXAMPLE</div>
+            {[
+              ['Buy entry', 'Bought 100 shares of RELIANCE @ ₹2,450', '→ Debit side, narration must have stock name'],
+              ['Sell entry', 'Sold 100 shares of RELIANCE @ ₹2,780', '→ Credit side, narration must have stock name'],
+            ].map(([type, example, note]) => (
+              <div key={type} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
+                  <span style={{ background: type === 'Buy entry' ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)', color: type === 'Buy entry' ? '#34d399' : '#f87171', fontSize: 10, padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>{type}</span>
+                  <span style={{ color: '#e2e8f0', fontSize: 11 }}>{example}</span>
+                </div>
+                <div style={{ color: '#4A6A8A', fontSize: 10, paddingLeft: 4 }}>{note}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={run} style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: 10, padding: '12px 32px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              Calculate P&L from Daybook
+            </button>
+            <div style={{ color: '#4A6A8A', fontSize: 11, marginTop: 8 }}>Upload Daybook in Quick Audit first if not done already</div>
+            {error && <div style={{ color: '#f87171', marginTop: 10, fontSize: 12 }}>{error}</div>}
+          </div>
         </div>
       )}
 
