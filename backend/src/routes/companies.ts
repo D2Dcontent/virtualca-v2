@@ -16,8 +16,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const { name } = req.body
   if (!name) return res.status(400).json({ error: 'Name required' })
   const sb = getClient()
-  const { data: co } = await sb.from('companies').insert({ name, user_id: req.userId }).select().single()
-  if (!co) return res.status(500).json({ error: 'Failed to create company' })
+  const { data: co, error: coErr } = await sb.from('companies').insert({ name }).select().single()
+  if (coErr || !co) return res.status(500).json({ error: coErr?.message || 'Failed to create company' })
   await sb.from('user_company_map').insert({ user_id: req.userId, company_id: co.id })
   await sb.from('files_meta').insert({ company_id: co.id, meta: {} })
   return res.json(co)

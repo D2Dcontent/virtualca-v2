@@ -12,6 +12,8 @@ export default function Sidebar() {
   const [showMenu, setShowMenu] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newName, setNewName] = useState('')
+  const [addError, setAddError] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
   const email = localStorage.getItem('email') || ''
   const initial = email.charAt(0).toUpperCase()
 
@@ -45,15 +47,21 @@ export default function Sidebar() {
     })
   }
 
-  const addCompany = () => {
-    if (!newName.trim()) return
-    companyAPI.create(newName.trim()).then(r => {
-      if (!r.data?.id) return
+  const addCompany = async () => {
+    if (!newName.trim() || addLoading) return
+    setAddError('')
+    setAddLoading(true)
+    try {
+      const r = await companyAPI.create(newName.trim())
+      if (!r.data?.id) { setAddError('Server error — please try again'); setAddLoading(false); return }
       setCompanies(prev => [...prev, r.data])
       switchCompany(r.data)
       setShowAddModal(false)
       setNewName('')
-    })
+    } catch (e: any) {
+      setAddError(e?.response?.data?.error || 'Failed to add company — please try again')
+    }
+    setAddLoading(false)
   }
 
   const nav = (path: string) => navigate(path)
@@ -174,15 +182,16 @@ export default function Sidebar() {
 
       {/* Add Company Modal */}
       {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setAddError('') }}>
           <div className="modal-box" style={{ maxWidth: 360, padding: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16, color: '#f1f5f9' }}>Add Company</div>
-            <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCompany()}
+            <input value={newName} onChange={e => { setNewName(e.target.value); setAddError('') }} onKeyDown={e => e.key === 'Enter' && addCompany()}
               type="text" placeholder="Company name (e.g. ABC Pvt Ltd)" autoFocus
-              style={{ width: '100%', fontSize: 13, borderRadius: 12, padding: '12px 14px', marginBottom: 16, background: 'var(--navy-700)', border: '1px solid var(--navy-500)', color: '#e2e8f0', outline: 'none' }} />
+              style={{ width: '100%', fontSize: 13, borderRadius: 12, padding: '12px 14px', marginBottom: addError ? 8 : 16, background: 'var(--navy-700)', border: `1px solid ${addError ? '#ef4444' : 'var(--navy-500)'}`, color: '#e2e8f0', outline: 'none' }} />
+            {addError && <div style={{ color: '#f87171', fontSize: 11, marginBottom: 12 }}>{addError}</div>}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={addCompany} className="btn-gold" style={{ flex: 1, padding: '10px 0', borderRadius: 12, fontSize: 13 }}>Add</button>
-              <button onClick={() => setShowAddModal(false)} className="btn-primary" style={{ flex: 1, padding: '10px 0', borderRadius: 12, fontSize: 13 }}>Cancel</button>
+              <button onClick={addCompany} disabled={addLoading} className="btn-gold" style={{ flex: 1, padding: '10px 0', borderRadius: 12, fontSize: 13, opacity: addLoading ? 0.7 : 1 }}>{addLoading ? 'Adding…' : 'Add'}</button>
+              <button onClick={() => { setShowAddModal(false); setAddError('') }} className="btn-primary" style={{ flex: 1, padding: '10px 0', borderRadius: 12, fontSize: 13 }}>Cancel</button>
             </div>
           </div>
         </div>
