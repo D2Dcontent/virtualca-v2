@@ -4,6 +4,7 @@ import cors from 'cors'
 import path from 'path'
 
 import authRoutes from './routes/auth'
+import dashboardRoutes from './routes/dashboard'
 import companyRoutes from './routes/companies'
 import uploadRoutes from './routes/upload'
 import auditRoutes from './routes/audit'
@@ -17,6 +18,7 @@ app.use(express.json())
 
 // API routes
 app.use('/api/auth', authRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/companies', companyRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/files', uploadRoutes)

@@ -1,49 +1,53 @@
 import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import Login from './pages/Login'
+import Sidebar from './components/Sidebar'
+import Dashboard from './pages/Dashboard'
 import QuickAudit from './pages/QuickAudit'
 import AskCA from './pages/AskCA'
+import ComingSoon from './pages/ComingSoon'
 
-type Tab = 'audit' | 'askca'
-
-const NAV: { id: Tab; label: string; icon: string }[] = [
-  { id: 'audit', label: 'Quick Audit', icon: '📊' },
-  { id: 'askca', label: 'Ask Your CA', icon: '🤖' },
-]
+function Layout() {
+  return (
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--navy-900)' }}>
+      <Sidebar />
+      <div style={{ marginLeft: 256, flex: 1, overflowY: 'auto' }}>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/quickaudit" element={<QuickAudit />} />
+          <Route path="/askca" element={<AskCA />} />
+          <Route path="/history" element={<ComingSoon title="History" icon="fa-clock-rotate-left" />} />
+          <Route path="/fullaudit" element={<ComingSoon title="Full Audit" icon="fa-clipboard-check" />} />
+          <Route path="/doc-checker" element={<ComingSoon title="Missing Docs" icon="fa-file-circle-exclamation" />} />
+          <Route path="/balance-sheet" element={<ComingSoon title="Balance Sheet" icon="fa-scale-balanced" />} />
+          <Route path="/cash-flow" element={<ComingSoon title="Cash Flow (AS-3)" icon="fa-water" />} />
+          <Route path="/tds-detect" element={<ComingSoon title="TDS Detector" icon="fa-triangle-exclamation" />} />
+          <Route path="/gst-return" element={<ComingSoon title="GST Returns" icon="fa-file-invoice" />} />
+          <Route path="/tds" element={<ComingSoon title="TDS Analysis" icon="fa-percent" />} />
+          <Route path="/pt-analysis" element={<ComingSoon title="PT Analysis" icon="fa-building-columns" />} />
+          <Route path="/compliance" element={<ComingSoon title="Compliance Calendar" icon="fa-calendar-check" />} />
+          <Route path="/shares-pnl" element={<ComingSoon title="Shares P&L" icon="fa-chart-line" />} />
+          <Route path="/broker-rec" element={<ComingSoon title="Broker Rec" icon="fa-handshake" />} />
+          <Route path="/party-rec" element={<ComingSoon title="Party Ledger Rec" icon="fa-right-left" />} />
+          <Route path="/bankrec" element={<ComingSoon title="Bank Reconciliation" icon="fa-building-columns" />} />
+          <Route path="/journal" element={<ComingSoon title="Journal Entry Guide" icon="fa-book-open" />} />
+          <Route path="/admin" element={<ComingSoon title="Admin Panel" icon="fa-sliders" />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   const [authed, setAuthed] = useState(!!localStorage.getItem('token'))
-  const [tab, setTab] = useState<Tab>('audit')
-
-  const logout = () => {
-    localStorage.clear()
-    setAuthed(false)
-  }
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--navy-900)' }}>
-      {/* Header */}
-      <div style={{ background: 'var(--navy-800)', borderBottom: '1px solid var(--navy-600)', padding: '0 20px', display: 'flex', alignItems: 'center', height: 56, flexShrink: 0 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: 'var(--gold-500)', marginRight: 32 }}>VirtualCA</div>
-        <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-          {NAV.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)} style={{
-              padding: '6px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-              background: tab === n.id ? 'rgba(201,168,76,0.15)' : 'transparent',
-              color: tab === n.id ? 'var(--gold-400)' : 'var(--muted)',
-            }}>{n.icon} {n.label}</button>
-          ))}
-        </div>
-        <button onClick={logout} style={{ fontSize: 12, color: 'var(--muted)', background: 'transparent', border: '1px solid var(--navy-600)', padding: '6px 14px', borderRadius: 10, cursor: 'pointer' }}>Logout</button>
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {tab === 'audit' && <QuickAudit />}
-        {tab === 'askca' && <AskCA />}
-      </div>
-    </div>
+    <BrowserRouter>
+      <Layout />
+    </BrowserRouter>
   )
 }

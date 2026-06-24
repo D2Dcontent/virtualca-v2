@@ -39,4 +39,8 @@ export const askCAAPI = {
     API.post('/api/ca-chat', { question, context, history }),
 }
 
+export const dashboardAPI = {
+  get: () => API.get('/api/dashboard'),
+}
+
 export default API
