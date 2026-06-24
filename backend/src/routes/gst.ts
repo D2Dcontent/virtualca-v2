@@ -2,11 +2,9 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { callModel } from '../ai/openrouter'
-import * as XLSX from 'xlsx'
+import { parseTallyTrialBalance } from '../engines/tallyParser'
 
 const router = Router()
-
-const GST_RATES = [0, 5, 12, 18, 28]
 
 function detectGSTRate(ledger: string): number {
   const l = ledger.toLowerCase()
@@ -14,7 +12,7 @@ function detectGSTRate(ledger: string): number {
   if (/5%|five percent/.test(l)) return 5
   if (/12%|twelve/.test(l)) return 12
   if (/28%|twenty.?eight/.test(l)) return 28
-  return 18 // default
+  return 18
 }
 
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
@@ -28,43 +26,35 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
 
   const buf = Buffer.from(await fileData.arrayBuffer())
-  const wb = XLSX.read(buf, { type: 'buffer' })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-  const rows: any[] = XLSX.utils.sheet_to_json(ws)
+  const { ledgers } = parseTallyTrialBalance(buf)
 
   const sales_entries: any[] = []
   const purchase_entries: any[] = []
   const missing_gstin: string[] = []
 
-  rows.forEach(row => {
-    const ledger = String(row.Ledger || row['Ledger Name'] || row.ledger || '')
-    const narration = String(row.Narration || row.narration || row.Description || '')
-    const amount = Number(row.Credit || row.credit || row.Amount || 0)
-    const debit = Number(row.Debit || row.debit || 0)
-
-    if (amount <= 0 && debit <= 0) return
-
-    const isSales = /sales|revenue|income/.test(ledger.toLowerCase())
-    const isPurchase = /purchase|buy|procure/.test(ledger.toLowerCase())
-
+  ledgers.forEach(l => {
+    const key = l.name.toLowerCase()
+    const isSales = /sales|revenue|income/.test(key)
+    const isPurchase = /purchase|buy|procure/.test(key)
     if (!isSales && !isPurchase) return
 
-    const rate = detectGSTRate(ledger)
-    const taxable_value = isSales ? amount : debit
-    const gst_amount = Math.round(taxable_value * rate / 100)
-    const is_igst = /igst|interstate|inter-state/.test(narration.toLowerCase() + ledger.toLowerCase())
-    const has_gstin = /\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}/.test(narration)
+    const rate = detectGSTRate(l.name)
+    const taxable_value = isSales ? l.credit : l.debit
+    if (taxable_value <= 0) return
 
-    if (isSales && !has_gstin && amount > 2500) missing_gstin.push(ledger)
+    const gst_amount = Math.round(taxable_value * rate / 100)
+    const is_igst = /igst|interstate|inter-state/.test(key)
+
+    if (isSales && taxable_value > 2500) missing_gstin.push(l.name)
 
     const entry = {
-      ledger,
+      ledger: l.name,
       taxable_value,
       rate,
       cgst: is_igst ? 0 : Math.round(gst_amount / 2),
       sgst: is_igst ? 0 : Math.round(gst_amount / 2),
       igst: is_igst ? gst_amount : 0,
-      has_gstin,
+      has_gstin: false,
     }
 
     if (isSales) sales_entries.push(entry)
@@ -80,8 +70,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const net_payable = Math.max(0, cgst_payable + sgst_payable + igst_payable)
 
   const fmt = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-  const summary = `Sales entries: ${sales_entries.length}. Net GST payable: ${fmt(net_payable)}. Missing GSTIN: ${missing_gstin.length}.`
-  const ai_insight = await callModel('You are a CA. Summarize this GST analysis in 2 lines with key actions.', summary)
+  const summary = `Sales entries: ${sales_entries.length}. Outward taxable: ${fmt(outward_taxable)}. ITC available: ${fmt(itc_available)}. Net GST payable: ${fmt(net_payable)}.`
+  const ai_insight = await callModel('You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 2 lines.', summary)
 
   res.json({
     total_sales_entries: sales_entries.length,
