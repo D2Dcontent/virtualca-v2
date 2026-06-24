@@ -140,7 +140,6 @@ export default function Sidebar() {
           <i className="fas fa-clipboard-check nav-icon"></i><span className="nav-label">Full Audit</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: 'rgba(201,168,76,0.15)', color: 'var(--gold-400)' }}>New</span>
         </div>
-        <div className={active('/doc-checker')} onClick={() => nav('/doc-checker')}><i className="fas fa-file-circle-exclamation nav-icon"></i><span className="nav-label">Missing Docs</span></div>
 
         <div className="nav-section-label">Financial Reports</div>
         <div className={active('/balance-sheet')} onClick={() => nav('/balance-sheet')}><i className="fas fa-scale-balanced nav-icon"></i><span className="nav-label">Balance Sheet</span></div>
@@ -150,7 +149,7 @@ export default function Sidebar() {
         <div className={active('/tds-detect')} onClick={() => nav('/tds-detect')}><i className="fas fa-triangle-exclamation nav-icon"></i><span className="nav-label">TDS Detector</span></div>
         <div className={active('/gst-return')} onClick={() => nav('/gst-return')}><i className="fas fa-file-invoice nav-icon"></i><span className="nav-label">GST Returns</span></div>
         <div className={active('/tds')} onClick={() => nav('/tds')}><i className="fas fa-percent nav-icon"></i><span className="nav-label">TDS Analysis</span></div>
-        <div className={active('/pt-analysis')} onClick={() => nav('/pt-analysis')}><i className="fas fa-building-columns nav-icon"></i><span className="nav-label">PT Analysis</span></div>
+
         <div className={active('/compliance')} onClick={() => nav('/compliance')}><i className="fas fa-calendar-check nav-icon"></i><span className="nav-label">Compliance Calendar</span></div>
 
         <div className="nav-section-label">Investments</div>
