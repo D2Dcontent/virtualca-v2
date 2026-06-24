@@ -39,7 +39,31 @@ export default function GSTReturn() {
         </div>
       )}
       {loading && <div style={{ textAlign: 'center', padding: 40, color: '#C9A84C' }}>Processing GST data...</div>}
-      {data && (
+      {data && data.total_sales_entries === 0 && (data.purchase_entries?.length || 0) === 0 && (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🚫</div>
+          <div style={{ color: '#F5F0E6', fontWeight: 700, fontSize: 15, marginBottom: 8 }}>No GST Ledgers Found</div>
+          <div style={{ color: '#4A6A8A', fontSize: 13, maxWidth: 360, margin: '0 auto 20px', lineHeight: 1.7 }}>
+            Your Trial Balance has no Sales, Purchase, or GST ledgers.<br/>
+            This could mean the company is <strong style={{ color: '#C9A84C' }}>not registered under GST</strong> or ledger names don't match standard Tally names.
+          </div>
+          <div style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 12, padding: 16, maxWidth: 380, margin: '0 auto', textAlign: 'left' }}>
+            <div style={{ color: '#C9A84C', fontSize: 11, fontWeight: 700, marginBottom: 8 }}>GST REGISTRATION THRESHOLDS</div>
+            {[
+              ['Goods supply', 'Turnover > ₹40 lakh'],
+              ['Service supply', 'Turnover > ₹20 lakh'],
+              ['Special category states', 'Turnover > ₹10 lakh'],
+            ].map(([type, rule]) => (
+              <div key={type} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 12 }}>
+                <span style={{ color: '#8AA8C0' }}>{type}</span>
+                <span style={{ color: '#F5F0E6' }}>{rule}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setData(null)} style={{ marginTop: 20, fontSize: 12, padding: '8px 18px', background: 'var(--navy-700)', color: '#8AA8C0', border: '1px solid var(--navy-600)', borderRadius: 8, cursor: 'pointer' }}>Try Again</button>
+        </div>
+      )}
+      {data && (data.total_sales_entries > 0 || (data.purchase_entries?.length || 0) > 0) && (
         <>
           {data.ai_insight && (
             <div style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 12, padding: '14px 16px', marginBottom: 14, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
