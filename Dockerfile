@@ -18,7 +18,7 @@ COPY frontend ./frontend
 RUN cd frontend && npm run build
 
 # Copy frontend build to backend/public
-RUN cp -r frontend/build backend/public
+RUN cp -r frontend/build public
 
 # Build backend
 RUN cd backend && npm run build
