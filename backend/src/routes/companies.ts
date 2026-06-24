@@ -26,10 +26,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   const cid = parseInt(req.params.id)
   const sb = getClient()
-  await sb.from('companies').delete().eq('id', cid)
-  await sb.from('user_company_map').delete().eq('company_id', cid)
-  await sb.from('files_meta').delete().eq('company_id', cid)
+  await sb.from('audit_history').delete().eq('company_id', cid)
   await sb.from('audit_result').delete().eq('company_id', cid)
+  await sb.from('files_meta').delete().eq('company_id', cid)
+  await sb.from('user_company_map').delete().eq('company_id', cid)
+  await sb.from('companies').delete().eq('id', cid)
   return res.json({ ok: true })
 })
 

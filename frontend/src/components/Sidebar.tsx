@@ -42,7 +42,7 @@ export default function Sidebar() {
       if (current?.id === c.id) {
         const next = updated[0] || null
         if (next) switchCompany(next)
-        else { setCurrent(null); localStorage.removeItem('company_id') }
+        else { setCurrent(null); localStorage.removeItem('company_id'); window.location.reload() }
       }
     })
   }
