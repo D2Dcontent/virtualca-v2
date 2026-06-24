@@ -43,15 +43,59 @@ const ASSET_MAP: Record<string, string> = {
   'closing stock': 'Inventories',
 }
 
-function classify(group: string): { side: 'liability' | 'asset' | null; bucket: string } {
+// Keyword fallback — classify by ledger NAME when group is missing
+function classifyByName(name: string): { side: 'liability' | 'asset' | null; bucket: string } {
+  const n = name.toLowerCase()
+
+  // Cash & Bank
+  if (/^cash$|cash in hand|petty cash/.test(n)) return { side: 'asset', bucket: 'Cash & Bank' }
+  if (/icici|hdfc|axis|kotak|sbi|bank|a\/c\.|account no|credit card/.test(n)) return { side: 'asset', bucket: 'Cash & Bank' }
+
+  // Trade Receivables
+  if (/debtor|receivable/.test(n)) return { side: 'asset', bucket: 'Trade Receivables' }
+
+  // Trade Payables
+  if (/creditor|payable|supplier/.test(n)) return { side: 'liability', bucket: 'Trade Payables' }
+
+  // Loans given out (asset)
+  if (/advance to|loan to|advance given|staff advance/.test(n)) return { side: 'asset', bucket: 'Current Assets' }
+
+  // Loans taken (liability)
+  if (/loan from|loan taken|borrowed|anjali.*loan|laddha.*loan/.test(n)) return { side: 'liability', bucket: 'Long-Term Borrowings' }
+
+  // Fixed Assets
+  if (/furniture|fixture|equipment|machinery|computer|vehicle|laptop|office asset|leasehold/.test(n)) return { side: 'asset', bucket: 'Fixed Assets' }
+
+  // Capital
+  if (/capital|owner|proprietor/.test(n)) return { side: 'liability', bucket: 'Equity & Capital' }
+
+  // Expenses (P&L — go to Current Liabilities if credit, Current Assets if debit)
+  if (/expense|rent|salary|wages|commission paid|discount allowed|food|hotel|travel|printing|telephone|electricity|power|repair|maintenance|professional fee|consulta|legal|audit fee|advertisement/.test(n)) {
+    return { side: 'asset', bucket: 'Prepaid & Other Assets' }  // debit balance expenses
+  }
+
+  // Income / Revenue
+  if (/income|revenue|sales|receipt|training|service/.test(n)) return { side: 'liability', bucket: 'Equity & Capital' }
+
+  // GST / Tax
+  if (/gst|tds|tax|duty|igst|cgst|sgst|tcs/.test(n)) return { side: 'liability', bucket: 'Current Liabilities' }
+
+  return { side: null, bucket: '' }
+}
+
+function classify(group: string, name: string): { side: 'liability' | 'asset' | null; bucket: string } {
   const g = group.toLowerCase().trim()
+
+  // Try group first
   for (const [k, v] of Object.entries(LIAB_MAP)) {
     if (g.includes(k)) return { side: 'liability', bucket: v }
   }
   for (const [k, v] of Object.entries(ASSET_MAP)) {
     if (g.includes(k)) return { side: 'asset', bucket: v }
   }
-  return { side: null, bucket: '' }
+
+  // Fallback: classify by ledger name keywords
+  return classifyByName(name)
 }
 
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
@@ -72,7 +116,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const unclassified: { ledger: string; group: string; balance: number }[] = []
 
   ledgers.forEach(l => {
-    const { side, bucket } = classify(l.group)
+    const { side, bucket } = classify(l.group, l.name)
     const balance = Math.abs(l.balance)
     if (!balance) return
 
@@ -85,7 +129,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       assets[bucket].total += balance
       assets[bucket].items.push({ ledger: l.name, balance })
     } else if (balance > 0) {
-      unclassified.push({ ledger: l.name, group: l.group, balance })
+      unclassified.push({ ledger: l.name, group: l.group || 'No group', balance })
     }
   })
 
