@@ -107,35 +107,53 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 
   // Use AI-parsed data if cached, else parse now with AI and cache it
   let ledgers: any[], company: string, period: string
-  if (meta.parsed_tb) {
-    ledgers = (meta.parsed_tb.ledgers || []).map((l: any) => ({
-      name: l.name, group: l.group || '',
-      debit: Number(l.debit) || 0, credit: Number(l.credit) || 0,
-      balance: Number(l.balance ?? (l.debit - l.credit)) || 0,
-    }))
-    company = meta.parsed_tb.company || 'Company'
-    period = meta.parsed_tb.period || 'FY 2025-26'
-  } else {
+  let aiParsedData: any = meta.parsed_tb
+  if (!aiParsedData) {
     // No cached AI parse — download file and parse with AI now
     const { data: fileData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
     if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
     const buf = Buffer.from(await fileData.arrayBuffer())
-    const aiParsed = await parseTBWithAI(buf)
+    aiParsedData = await parseTBWithAI(buf)
     // Cache for future use
-    await sb.from('files_meta').upsert({ company_id: cid, meta: { ...meta, parsed_tb: aiParsed, parsed_tb_at: new Date().toISOString() } })
-    ledgers = aiParsed.ledgers
-    company = aiParsed.company
-    period = aiParsed.period
+    await sb.from('files_meta').upsert({ company_id: cid, meta: { ...meta, parsed_tb: aiParsedData, parsed_tb_at: new Date().toISOString() } })
   }
+  // Preserve all AI fields including classification and correct_group
+  ledgers = (aiParsedData.ledgers || []).map((l: any) => ({
+    name: l.name,
+    group: l.group || l.tally_group || '',
+    debit: Number(l.debit) || 0,
+    credit: Number(l.credit) || 0,
+    balance: Number(l.balance ?? (l.debit - l.credit)) || 0,
+    classification: l.classification || '',
+    correct_group: l.correct_group || '',
+    bs_or_pl: l.bs_or_pl || 'BS',
+  }))
+  company = aiParsedData.company || 'Company'
+  period = aiParsedData.period || 'FY 2025-26'
 
   const liabilities: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const assets: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const unclassified: { ledger: string; group: string; balance: number }[] = []
 
   ledgers.forEach(l => {
-    const { side, bucket } = classify(l.group, l.name)
     const balance = Math.abs(l.balance)
     if (!balance) return
+
+    // Use AI classification first, fall back to rule-based
+    let side: 'liability' | 'asset' | null = null
+    let bucket = l.correct_group || l.group || 'Other'
+
+    if (l.classification === 'Asset') side = 'asset'
+    else if (l.classification === 'Liability') side = 'liability'
+    else if (l.classification === 'Income' || l.classification === 'Expense') {
+      // P&L items — skip for Balance Sheet (they belong in P&L)
+      return
+    } else {
+      // No AI classification — fall back to rule-based
+      const fb = classify(l.group, l.name)
+      side = fb.side
+      bucket = fb.bucket
+    }
 
     if (side === 'liability') {
       if (!liabilities[bucket]) liabilities[bucket] = { total: 0, items: [] }
@@ -245,5 +263,6 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 
 
