@@ -71,7 +71,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const totalAtRisk = flagged.reduce((s, f) => s + f.amount, 0)
 
   const context = `${flagged.length} entries flagged for missing documents. High risk: ${highRisk.length}. Total amount at risk: ${fmt(totalAtRisk)}. Top entries: ${flagged.slice(0, 3).map(f => `${f.ledger} ${fmt(f.amount)} (${f.risk})`).join(', ')}`
-  const aiInsight = await callModel(`You are a CA. Summarize this missing docs audit in 2 lines. ${context}`)
+  const aiInsight = await callModel('You are a CA. Summarize this missing docs audit in 2 lines.', context)
 
   res.json({
     flagged,
