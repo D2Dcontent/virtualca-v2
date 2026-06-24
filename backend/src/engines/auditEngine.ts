@@ -45,13 +45,13 @@ function parseExcel(buffer: Buffer): AuditRow[] {
   const raw = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[]
 
   return raw.map(r => ({
-    date: String(r['Date'] || r['date'] || ''),
-    ledger: String(r['Ledger'] || r['Particulars'] || r['ledger'] || ''),
-    voucher_type: String(r['Voucher Type'] || r['voucher_type'] || ''),
-    debit: Number(r['Debit'] || r['Dr'] || r['debit'] || 0),
-    credit: Number(r['Credit'] || r['Cr'] || r['credit'] || 0),
-    narration: String(r['Narration'] || r['narration'] || ''),
-    group: String(r['Group'] || r['group'] || ''),
+    date: String(r['Date'] || r['date'] || r['Dt'] || r['DATE'] || ''),
+    ledger: String(r['Ledger'] || r['Particulars'] || r['ledger'] || r['Account'] || r['Name'] || r['LEDGER'] || r['Ledger Name'] || ''),
+    voucher_type: String(r['Voucher Type'] || r['Vch Type'] || r['VchType'] || r['voucher_type'] || r['Type'] || r['VOUCHER TYPE'] || ''),
+    debit: Number(r['Debit'] || r['Dr'] || r['Debit Amount'] || r['DR'] || r['DEBIT'] || r['debit'] || 0),
+    credit: Number(r['Credit'] || r['Cr'] || r['Credit Amount'] || r['CR'] || r['CREDIT'] || r['credit'] || 0),
+    narration: String(r['Narration'] || r['narration'] || r['Description'] || r['Remarks'] || r['NARRATION'] || ''),
+    group: String(r['Group'] || r['group'] || r['Under'] || r['GROUP'] || r['Ledger Group'] || ''),
   }))
 }
 
@@ -239,17 +239,21 @@ function computeScore(result: Omit<AuditResult, 'summary' | 'ai_insight'>): { sc
   return { score, critical, warnings, questions }
 }
 
-export function runAudit(tbBuffer: Buffer, company = '', period = ''): AuditResult {
-  const rows = parseExcel(tbBuffer)
+export function runAudit(primaryBuffer: Buffer, tbBuffer: Buffer | null = null, company = '', period = ''): AuditResult {
+  // primaryBuffer = daybook (transactions) — used for cash, TDS, large expenses
+  // tbBuffer = trial balance (balances) — used for outstanding, loans, bank accounts, salary
+  // If only one file provided, use it for everything
+  const txRows = parseExcel(primaryBuffer)
+  const balRows = tbBuffer ? parseExcel(tbBuffer) : txRows
 
   const partial = {
-    cash_violations: detectCashViolations(rows),
-    tds_compliance: detectTDS(rows),
-    outstanding: detectOutstanding(rows),
-    large_expenses: detectLargeExpenses(rows),
-    loans: detectLoans(rows),
-    bank_accounts: detectBankAccounts(rows),
-    salary_compliance: detectSalaryIssues(rows),
+    cash_violations: detectCashViolations(txRows),
+    tds_compliance: detectTDS(txRows),
+    outstanding: detectOutstanding(balRows),
+    large_expenses: detectLargeExpenses(txRows),
+    loans: detectLoans(balRows),
+    bank_accounts: detectBankAccounts(balRows),
+    salary_compliance: detectSalaryIssues(balRows),
     ledger_classification: [] as LedgerIssue[],
   }
 

@@ -14,16 +14,29 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const { data: metaRow } = await sb.from('files_meta').select('meta').eq('company_id', cid).single()
   const meta = metaRow?.meta ?? {}
 
-  if (!meta.trial_balance_path) return res.status(400).json({ error: 'Trial balance file not uploaded' })
+  // Need at least one file
+  if (!meta.trial_balance_path && !meta.daybook_path) return res.status(400).json({ error: 'Trial balance file not uploaded' })
 
-  // Download TB file from Supabase storage
-  const { data: tbData, error } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
-  if (error || !tbData) return res.status(500).json({ error: 'Could not load trial balance file' })
+  // Download daybook for transaction-level checks (cash, TDS, large expenses)
+  // Fall back to trial balance if no daybook
+  let daybookBuffer: Buffer | null = null
+  let tbBuffer: Buffer | null = null
 
-  const tbBuffer = Buffer.from(await tbData.arrayBuffer())
+  if (meta.daybook_path) {
+    const { data: dbData } = await sb.storage.from(BUCKET).download(meta.daybook_path)
+    if (dbData) daybookBuffer = Buffer.from(await dbData.arrayBuffer())
+  }
+  if (meta.trial_balance_path) {
+    const { data: tbData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
+    if (tbData) tbBuffer = Buffer.from(await tbData.arrayBuffer())
+  }
 
-  // Run audit engine
-  const result = runAudit(tbBuffer, meta.company_name ?? '', meta.period ?? '')
+  // Use daybook for transactions; fall back to trial balance if no daybook
+  const primaryBuffer = daybookBuffer ?? tbBuffer
+  if (!primaryBuffer) return res.status(500).json({ error: 'Could not load uploaded files' })
+
+  // Run audit engine (primary = daybook or TB, secondary = TB for balance checks)
+  const result = runAudit(primaryBuffer, tbBuffer, meta.company_name ?? '', meta.period ?? '')
 
   // Generate AI insight
   const aiPrompt = `You are a senior CA in India. Answer in plain text only, no markdown, no stars.
