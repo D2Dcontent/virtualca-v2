@@ -141,7 +141,11 @@ export default function SharesPnL() {
           <div style={card}>
             <div style={{ color: '#F5F0E6', fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Transaction Breakdown (FIFO)</div>
             {data.trades?.length === 0
-              ? <div style={{ color: '#4A6A8A', fontSize: 12 }}>No closed trades found. Upload daybook with buy/sell entries for detailed P&L.</div>
+              ? <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                  <div style={{ color: '#F5F0E6', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>No Share Transactions Found</div>
+                  <div style={{ color: '#4A6A8A', fontSize: 12 }}>No share buy/sell entries in your Tally daybook. This company may not have share investments recorded in Tally.</div>
+                </div>
               : <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead>

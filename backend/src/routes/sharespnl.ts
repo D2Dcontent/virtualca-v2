@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { callModel } from '../ai/openrouter'
-import * as XLSX from 'xlsx'
+import { parseTallyDaybook } from '../engines/tallyParser'
 
 const router = Router()
 
@@ -41,36 +41,27 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
 
   const buf = Buffer.from(await fileData.arrayBuffer())
-  const wb = XLSX.read(buf, { type: 'buffer' })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-  const rows: any[] = XLSX.utils.sheet_to_json(ws)
+  const rows = parseTallyDaybook(buf)
 
-  // collect buy / sell entries per scrip
   const buys: Record<string, { date: Date; qty: number; value: number }[]> = {}
   const sells: { scrip: string; date: Date; qty: number; value: number }[] = []
 
   rows.forEach(row => {
-    const ledger = String(row.Ledger || row['Ledger Name'] || row.ledger || '')
-    const narration = String(row.Narration || row.narration || row.Description || '')
-    const combined = (ledger + ' ' + narration).toLowerCase()
-    const debit = Number(row.Debit || row.debit || 0)
-    const credit = Number(row.Credit || row.credit || 0)
-    const dateRaw = String(row.Date || row.date || '')
-    const date = parseDate(dateRaw)
+    const combined = (row.particulars + ' ' + row.vchType).toLowerCase()
+    const date = parseDate(row.date)
     if (!date) return
 
-    // detect scrip name from ledger (e.g. "HDFCBANK Shares", "Reliance Stock")
-    const scripMatch = ledger.match(/^([A-Z0-9&\s]+?)(?:\s+shares?|\s+stock|\s+eq|\s+nse)?$/i)
-    const scrip = scripMatch ? scripMatch[1].trim().toUpperCase() : ledger.toUpperCase()
+    const scripMatch = row.particulars.match(/^([A-Z0-9&\s]+?)(?:\s+shares?|\s+stock|\s+eq|\s+nse)?$/i)
+    const scrip = scripMatch ? scripMatch[1].trim().toUpperCase() : row.particulars.toUpperCase()
 
-    const isBuy = /purchase|buy|bought/.test(combined) || (/shares?|stock|equity/i.test(combined) && debit > 0)
-    const isSell = /sale|sell|sold/.test(combined) || (/shares?|stock|equity/i.test(combined) && credit > 0)
+    const isBuy = /purchase|buy|bought/.test(combined) || (/shares?|stock|equity/i.test(combined) && row.debit > 0)
+    const isSell = /sale|sell|sold/.test(combined) || (/shares?|stock|equity/i.test(combined) && row.credit > 0)
 
-    if (isBuy && debit > 0 && /share|stock|equity|invest/i.test(combined)) {
+    if (isBuy && row.debit > 0 && /share|stock|equity|invest/i.test(combined)) {
       if (!buys[scrip]) buys[scrip] = []
-      buys[scrip].push({ date, qty: 1, value: debit })
-    } else if (isSell && credit > 0 && /share|stock|equity|invest/i.test(combined)) {
-      sells.push({ scrip, date, qty: 1, value: credit })
+      buys[scrip].push({ date, qty: 1, value: row.debit })
+    } else if (isSell && row.credit > 0 && /share|stock|equity|invest/i.test(combined)) {
+      sells.push({ scrip, date, qty: 1, value: row.credit })
     }
   })
 
