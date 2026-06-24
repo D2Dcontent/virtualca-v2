@@ -1,7 +1,7 @@
 ﻿import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
-import { callModel, runCriticAI } from '../ai/openrouter'
+import { callModel, runCriticAI, parseTBWithAI } from '../ai/openrouter'
 import { parseTallyTrialBalance } from '../engines/tallyParser'
 
 const router = Router()
@@ -105,7 +105,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const meta = metaRow?.meta ?? {}
   if (!meta.trial_balance_path) return res.status(400).json({ error: 'Upload Trial Balance first' })
 
-  // Use AI-parsed data if available, else fall back to code parser
+  // Use AI-parsed data if cached, else parse now with AI and cache it
   let ledgers: any[], company: string, period: string
   if (meta.parsed_tb) {
     ledgers = (meta.parsed_tb.ledgers || []).map((l: any) => ({
@@ -116,11 +116,16 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
     company = meta.parsed_tb.company || 'Company'
     period = meta.parsed_tb.period || 'FY 2025-26'
   } else {
+    // No cached AI parse — download file and parse with AI now
     const { data: fileData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
     if (!fileData) return res.status(500).json({ error: 'Failed to download file' })
     const buf = Buffer.from(await fileData.arrayBuffer())
-    const parsed = parseTallyTrialBalance(buf)
-    ledgers = parsed.ledgers; company = parsed.company; period = parsed.period
+    const aiParsed = await parseTBWithAI(buf)
+    // Cache for future use
+    await sb.from('files_meta').upsert({ company_id: cid, meta: { ...meta, parsed_tb: aiParsed, parsed_tb_at: new Date().toISOString() } })
+    ledgers = aiParsed.ledgers
+    company = aiParsed.company
+    period = aiParsed.period
   }
 
   const liabilities: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
@@ -240,4 +245,5 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 

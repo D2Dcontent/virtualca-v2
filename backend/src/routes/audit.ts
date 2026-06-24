@@ -2,7 +2,7 @@
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { runAuditFromParsed, runAudit } from '../engines/auditEngine'
-import { callModel, runCriticAI, CriticVerdict } from '../ai/openrouter'
+import { callModel, runCriticAI, CriticVerdict, parseTBWithAI, parseDaybookWithAI } from '../ai/openrouter'
 
 const router = Router()
 
@@ -15,26 +15,29 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 
   if (!meta.trial_balance_path && !meta.daybook_path) return res.status(400).json({ error: 'Trial balance file not uploaded' })
 
-  // If we have AI-parsed data, use it — otherwise fall back to raw Excel
-  let result: any
-  if (meta.parsed_tb) {
-    result = runAuditFromParsed(meta.parsed_tb, meta.parsed_daybook ?? null)
-  } else {
-    // Legacy: download raw files and parse with code parser
-    let daybookBuffer: Buffer | null = null
-    let tbBuffer: Buffer | null = null
-    if (meta.daybook_path) {
-      const { data: dbData } = await sb.storage.from(BUCKET).download(meta.daybook_path)
-      if (dbData) daybookBuffer = Buffer.from(await dbData.arrayBuffer())
-    }
+  // If we have AI-parsed data, use it — otherwise parse with AI now and cache
+  let parsed_tb = meta.parsed_tb
+  let parsed_daybook = meta.parsed_daybook ?? null
+
+  if (!parsed_tb) {
+    // Download and AI-parse TB now
     if (meta.trial_balance_path) {
       const { data: tbData } = await sb.storage.from(BUCKET).download(meta.trial_balance_path)
-      if (tbData) tbBuffer = Buffer.from(await tbData.arrayBuffer())
+      if (tbData) {
+        parsed_tb = await parseTBWithAI(Buffer.from(await tbData.arrayBuffer()))
+      }
     }
-    const primaryBuffer = daybookBuffer ?? tbBuffer
-    if (!primaryBuffer) return res.status(500).json({ error: 'Could not load uploaded files' })
-    result = runAudit(primaryBuffer, tbBuffer, meta.company_name ?? '', meta.period ?? '')
+    if (!parsed_tb) return res.status(500).json({ error: 'Could not parse Trial Balance' })
+    // Also parse daybook if available
+    if (!parsed_daybook && meta.daybook_path) {
+      const { data: dbData } = await sb.storage.from(BUCKET).download(meta.daybook_path)
+      if (dbData) parsed_daybook = await parseDaybookWithAI(Buffer.from(await dbData.arrayBuffer()))
+    }
+    // Cache for future
+    await sb.from('files_meta').upsert({ company_id: cid, meta: { ...meta, parsed_tb, parsed_daybook, parsed_tb_at: new Date().toISOString() } })
   }
+
+  const result = runAuditFromParsed(parsed_tb, parsed_daybook)
 
   const aiPrompt = `You are a senior CA in India. Answer in plain text only, no markdown, no stars. Maximum 3 lines. Plain sentences. Use Rs. for amounts.`
   const aiData = `Company: ${result.summary.company}\nScore: ${result.summary.score}/100\nCritical: ${result.summary.critical} | Warnings: ${result.summary.warnings} | Questions: ${result.summary.questions}\nGive a 3-line audit summary with top risk and urgent action.`
@@ -101,3 +104,4 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
 })
 
 export default router
+
