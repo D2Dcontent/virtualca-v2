@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "cd backend && npm install && npm run build && cd ../frontend && npm install && npm run build && cp -r build ../public"
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
     "startCommand": "node backend/dist/index.js",
