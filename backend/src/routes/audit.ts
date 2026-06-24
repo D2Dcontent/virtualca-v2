@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
 import { runAudit } from '../engines/auditEngine'
-import { callModel } from '../ai/openrouter'
+import { callModel, runCriticAI, CriticVerdict } from '../ai/openrouter'
 
 const router = Router()
 
@@ -34,6 +34,32 @@ Critical: ${result.summary.critical} | Warnings: ${result.summary.warnings} | Qu
 Give a 3-line audit summary with top risk and urgent action.`
 
   result.ai_insight = await callModel(aiPrompt, aiData, 200)
+
+  // === CRITIC AI — verify critical findings ===
+  const criticsInput: { type: string; detail: string }[] = [
+    ...result.cash_violations.map(v => ({ type: 'Cash Violation', detail: `Party: ${v.party}, Amount: Rs.${v.amount}, Section: ${v.section}` })),
+    ...result.tds_compliance.map(t => ({ type: 'TDS Issue', detail: t.issue })),
+    ...result.outstanding.filter(o => o.severity === 'Critical').map(o => ({ type: 'Outstanding', detail: o.issue })),
+    ...result.salary_compliance.filter(s => s.severity === 'Critical').map(s => ({ type: 'Salary/PT', detail: s.issue })),
+  ]
+
+  let critic_review: (CriticVerdict & { type: string; detail: string; confirmed_critical: boolean })[] = []
+  if (criticsInput.length > 0) {
+    const verdicts = await runCriticAI(criticsInput)
+    critic_review = criticsInput.map((f, i) => ({
+      ...f,
+      ...(verdicts[i] ?? { confirmed: true, confidence: 'low', reason: '', penalty: '', action: '' }),
+      confirmed_critical: verdicts[i]?.confirmed ?? true,
+    }))
+
+    // Adjust score: rejected findings don't count as critical
+    const falsePositives = critic_review.filter(c => !c.confirmed_critical).length
+    if (falsePositives > 0) {
+      result.summary.critical = Math.max(0, result.summary.critical - falsePositives)
+      result.summary.score = Math.min(100, result.summary.score + falsePositives * 15)
+    }
+  }
+  ;(result as any).critic_review = critic_review
 
   // Save to Supabase
   const { data: existing } = await sb.from('audit_result').select('id').eq('company_id', cid).single()
