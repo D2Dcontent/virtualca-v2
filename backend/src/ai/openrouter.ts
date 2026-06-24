@@ -99,7 +99,7 @@ ${context}`
   ]
 
   const resp = await client.chat.completions.create({
-    model: MODEL,
+    model: AUDIT_MODEL,
     max_tokens: maxTokens,
     messages,
   })
