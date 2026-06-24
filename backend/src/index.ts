@@ -24,7 +24,7 @@ app.use('/api/audit', auditRoutes)
 app.use('/api/ca-chat', askcaRoutes)
 
 // Serve React frontend in production
-const BUILD_DIR = path.join(__dirname, '../frontend/build')
+const BUILD_DIR = path.join(process.cwd(), 'public')
 app.use(express.static(BUILD_DIR))
 app.get('*', (_req, res) => res.sendFile(path.join(BUILD_DIR, 'index.html')))
 
