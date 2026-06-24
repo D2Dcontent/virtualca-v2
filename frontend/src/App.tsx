@@ -19,6 +19,7 @@ import CashFlow from './pages/CashFlow'
 import PartyRec from './pages/PartyRec'
 import BankRec from './pages/BankRec'
 import BrokerRec from './pages/BrokerRec'
+import SharesPnL from './pages/SharesPnL'
 import ComingSoon from './pages/ComingSoon'
 
 function Layout() {
@@ -40,7 +41,7 @@ function Layout() {
           <Route path="/tds" element={<TDSAnalysis />} />
           <Route path="/pt-analysis" element={<PTAnalysis />} />
           <Route path="/compliance" element={<Compliance />} />
-          <Route path="/shares-pnl" element={<ComingSoon title="Shares P&L" icon="fa-chart-line" />} />
+          <Route path="/shares-pnl" element={<SharesPnL />} />
           <Route path="/broker-rec" element={<BrokerRec />} />
           <Route path="/party-rec" element={<PartyRec />} />
           <Route path="/bankrec" element={<BankRec />} />
