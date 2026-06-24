@@ -20,6 +20,7 @@ import partyrecRoutes from './routes/partyrec'
 import bankrecRoutes from './routes/bankrec'
 import brokerrecRoutes from './routes/brokerrec'
 import sharespnlRoutes from './routes/sharespnl'
+import adminRoutes from './routes/admin'
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -46,6 +47,7 @@ app.use('/api/party-rec', partyrecRoutes)
 app.use('/api/bankrec', bankrecRoutes)
 app.use('/api/broker-rec', brokerrecRoutes)
 app.use('/api/shares-pnl', sharespnlRoutes)
+app.use('/api/admin', adminRoutes)
 
 // Serve React frontend in production
 const BUILD_DIR = path.join(process.cwd(), 'public')

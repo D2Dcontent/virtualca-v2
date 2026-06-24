@@ -20,6 +20,8 @@ import PartyRec from './pages/PartyRec'
 import BankRec from './pages/BankRec'
 import BrokerRec from './pages/BrokerRec'
 import SharesPnL from './pages/SharesPnL'
+import Admin from './pages/Admin'
+import JournalGuide from './pages/JournalGuide'
 import ComingSoon from './pages/ComingSoon'
 
 function Layout() {
@@ -45,8 +47,8 @@ function Layout() {
           <Route path="/broker-rec" element={<BrokerRec />} />
           <Route path="/party-rec" element={<PartyRec />} />
           <Route path="/bankrec" element={<BankRec />} />
-          <Route path="/journal" element={<ComingSoon title="Journal Entry Guide" icon="fa-book-open" />} />
-          <Route path="/admin" element={<ComingSoon title="Admin Panel" icon="fa-sliders" />} />
+          <Route path="/journal" element={<JournalGuide />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
