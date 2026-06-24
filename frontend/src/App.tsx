@@ -9,6 +9,11 @@ import AskCA from './pages/AskCA'
 import History from './pages/History'
 import FullAudit from './pages/FullAudit'
 import DocChecker from './pages/DocChecker'
+import TDSDetect from './pages/TDSDetect'
+import TDSAnalysis from './pages/TDSAnalysis'
+import PTAnalysis from './pages/PTAnalysis'
+import GSTReturn from './pages/GSTReturn'
+import Compliance from './pages/Compliance'
 import ComingSoon from './pages/ComingSoon'
 
 function Layout() {
@@ -25,11 +30,11 @@ function Layout() {
           <Route path="/doc-checker" element={<DocChecker />} />
           <Route path="/balance-sheet" element={<ComingSoon title="Balance Sheet" icon="fa-scale-balanced" />} />
           <Route path="/cash-flow" element={<ComingSoon title="Cash Flow (AS-3)" icon="fa-water" />} />
-          <Route path="/tds-detect" element={<ComingSoon title="TDS Detector" icon="fa-triangle-exclamation" />} />
-          <Route path="/gst-return" element={<ComingSoon title="GST Returns" icon="fa-file-invoice" />} />
-          <Route path="/tds" element={<ComingSoon title="TDS Analysis" icon="fa-percent" />} />
-          <Route path="/pt-analysis" element={<ComingSoon title="PT Analysis" icon="fa-building-columns" />} />
-          <Route path="/compliance" element={<ComingSoon title="Compliance Calendar" icon="fa-calendar-check" />} />
+          <Route path="/tds-detect" element={<TDSDetect />} />
+          <Route path="/gst-return" element={<GSTReturn />} />
+          <Route path="/tds" element={<TDSAnalysis />} />
+          <Route path="/pt-analysis" element={<PTAnalysis />} />
+          <Route path="/compliance" element={<Compliance />} />
           <Route path="/shares-pnl" element={<ComingSoon title="Shares P&L" icon="fa-chart-line" />} />
           <Route path="/broker-rec" element={<ComingSoon title="Broker Rec" icon="fa-handshake" />} />
           <Route path="/party-rec" element={<ComingSoon title="Party Ledger Rec" icon="fa-right-left" />} />
