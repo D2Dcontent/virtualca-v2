@@ -16,6 +16,9 @@ import gstRoutes from './routes/gst'
 import complianceRoutes from './routes/compliance'
 import balancesheetRoutes from './routes/balancesheet'
 import cashflowRoutes from './routes/cashflow'
+import partyrecRoutes from './routes/partyrec'
+import bankrecRoutes from './routes/bankrec'
+import brokerrecRoutes from './routes/brokerrec'
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -38,6 +41,9 @@ app.use('/api/gst-return', gstRoutes)
 app.use('/api/compliance', complianceRoutes)
 app.use('/api/balance-sheet', balancesheetRoutes)
 app.use('/api/cash-flow', cashflowRoutes)
+app.use('/api/party-rec', partyrecRoutes)
+app.use('/api/bankrec', bankrecRoutes)
+app.use('/api/broker-rec', brokerrecRoutes)
 
 // Serve React frontend in production
 const BUILD_DIR = path.join(process.cwd(), 'public')
