@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { uploadAPI, auditAPI } from '../api'
 
 const fmt = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -35,12 +35,12 @@ function Sect({ title, sub, badge, badgeColor, children }: { title: string; sub:
 }
 
 const FILE_FIELDS = [
-  { key: 'trial_balance', label: 'Trial Balance', required: true, color: '#818cf8' },
-  { key: 'daybook', label: 'Daybook', required: true, color: '#34d399' },
-  { key: 'balance_sheet', label: 'Balance Sheet', required: false, color: '#60a5fa' },
-  { key: 'profit_loss', label: 'Profit & Loss', required: false, color: '#f59e0b' },
-  { key: 'bank_statement', label: 'Bank Statement', required: false, color: '#f87171' },
-  { key: 'bank_tally', label: 'Bank Ledger (Tally)', required: false, color: '#a78bfa' },
+  { key: 'trial_balance', label: 'Trial Balance', required: true, color: '#818cf8', accept: '.xlsx,.xls,.csv' },
+  { key: 'daybook', label: 'Daybook', required: true, color: '#34d399', accept: '.xlsx,.xls,.csv' },
+  { key: 'balance_sheet', label: 'Balance Sheet', required: false, color: '#60a5fa', accept: '.xlsx,.xls,.csv' },
+  { key: 'profit_loss', label: 'Profit & Loss', required: false, color: '#f59e0b', accept: '.xlsx,.xls,.csv' },
+  { key: 'bank_statement', label: 'Bank Statement', required: false, color: '#f87171', accept: '.xlsx,.xls,.csv,.pdf' },
+  { key: 'bank_tally', label: 'Bank Ledger (Tally)', required: false, color: '#a78bfa', accept: '.xlsx,.xls,.csv' },
 ]
 
 export default function FullAudit() {
@@ -81,8 +81,8 @@ export default function FullAudit() {
             </div>
             <label className="upload-zone" htmlFor={f.key} style={{ display: 'block', borderRadius: 12, padding: 12, textAlign: 'center', cursor: 'pointer' }}>
               <i className={`fas fa-cloud-upload-alt`} style={{ color: f.color, fontSize: 18, display: 'block', marginBottom: 6 }}></i>
-              <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>{files[f.key] || 'Drop Excel here'}</p>
-              <input type="file" id={f.key} accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => uploadFile(f.key, e.target.files?.[0] || null)} />
+              <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>{files[f.key] || (f.key === 'bank_statement' ? 'Drop Excel or PDF here' : 'Drop Excel here')}</p>
+              <input type="file" id={f.key} accept={f.accept} style={{ display: 'none' }} onChange={e => uploadFile(f.key, e.target.files?.[0] || null)} />
               <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: f.color, color: '#070E1A' }}>Choose</span>
             </label>
           </div>
@@ -342,3 +342,4 @@ export default function FullAudit() {
     </div>
   )
 }
+

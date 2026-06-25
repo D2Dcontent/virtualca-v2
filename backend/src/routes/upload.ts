@@ -10,6 +10,10 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 router.post('/files', requireAuth, upload.fields([
   { name: 'trial_balance', maxCount: 1 },
   { name: 'daybook', maxCount: 1 },
+  { name: 'balance_sheet', maxCount: 1 },
+  { name: 'profit_loss', maxCount: 1 },
+  { name: 'bank_statement', maxCount: 1 },
+  { name: 'bank_tally', maxCount: 1 },
 ]), async (req: AuthRequest, res) => {
   const cid = req.companyId!
   const files = req.files as Record<string, Express.Multer.File[]>
@@ -70,3 +74,4 @@ router.get('/status', requireAuth, async (req: AuthRequest, res) => {
 })
 
 export default router
+
