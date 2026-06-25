@@ -197,20 +197,27 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   let critic_verdict: any = null
 
   if (!tallied && difference > 0) {
-    // Find expense/income ledgers sitting on wrong BS side
+    // Only flag ledgers actually ON the BS (asset/liability side) that look like P&L items
+    // Ledgers already skipped from BS are NOT wrong — they are correctly in Tally P&L groups
+    const allBSLedgerNames = new Set([
+      ...Object.values(assets).flatMap(b => b.items.map(i => i.ledger)),
+      ...Object.values(liabilities).flatMap(b => b.items.map(i => i.ledger)),
+    ])
+
     const EXPENSE_KW = ['rent','salary','wages','commission','food','hotel','travel','telephone',
       'electricity','printing','stationery','repair','maintenance','advertisement','marketing',
-      'subscription','fee','fees','expense','expenses','petrol','diesel','fuel','misc']
+      'subscription','expense','expenses','petrol','diesel','fuel','misc']
     const INCOME_KW = ['sales','revenue','income','service income','commission received',
       'interest received','rent received','dividend','discount received']
 
+    // Only flag if they are ACTUALLY on the BS (not already correctly excluded)
     const wrongExpenses = ledgers.filter(l => {
       const nl = l.name.toLowerCase()
-      return EXPENSE_KW.some(k => nl.includes(k)) && l.debit > 0
+      return allBSLedgerNames.has(l.name) && EXPENSE_KW.some(k => nl.includes(k)) && l.debit > 0
     })
     const wrongIncomes = ledgers.filter(l => {
       const nl = l.name.toLowerCase()
-      return INCOME_KW.some(k => nl.includes(k)) && l.credit > 0
+      return allBSLedgerNames.has(l.name) && INCOME_KW.some(k => nl.includes(k)) && l.credit > 0
     })
 
     const wrongExpenseTotal = wrongExpenses.reduce((s, l) => s + l.debit, 0)
@@ -282,6 +289,7 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 
 
 
