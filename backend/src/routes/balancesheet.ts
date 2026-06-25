@@ -131,6 +131,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
   }))
   company = aiParsedData.company || 'Company'
   period = aiParsedData.period || 'FY 2025-26'
+  console.log(`[BS] ${ledgers.length} ledgers, sample:`, ledgers.slice(0,3).map(l => `${l.name}|${l.classification}|${l.balance}`))
 
   const liabilities: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
   const assets: Record<string, { total: number; items: { ledger: string; balance: number }[] }> = {}
@@ -150,10 +151,17 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       // P&L items — skip for Balance Sheet (they belong in P&L)
       return
     } else {
-      // No AI classification — fall back to rule-based
-      const fb = classify(l.group, l.name)
-      side = fb.side
-      bucket = fb.bucket
+      // No AI classification — try classifyByName (works on ledger name, not Tally group)
+      const fb = classifyByName(l.name)
+      if (fb.side) {
+        side = fb.side
+        bucket = fb.bucket
+      } else {
+        // Last resort: try group-based classify
+        const fb2 = classify(l.group, l.name)
+        side = fb2.side
+        bucket = fb2.bucket || l.group || 'Other'
+      }
     }
 
     if (side === 'liability') {
@@ -264,6 +272,7 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 
 
 
