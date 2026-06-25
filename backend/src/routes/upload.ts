@@ -2,7 +2,7 @@
 import multer from 'multer'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient, BUCKET } from '../db/supabase'
-import { parseTBWithAI, parseDaybookWithAI } from '../ai/openrouter'
+import { parseTBWithAI, parseDaybookWithAI, parseBankStatementWithAI } from '../ai/openrouter'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
@@ -53,6 +53,14 @@ router.post('/files', requireAuth, upload.fields([
         updates['parsed_daybook_at'] = new Date().toISOString()
         console.log(`[upload] Daybook parsed: ${parsed.length} entries`)
       }
+      if (buffers['bank_statement']) {
+        const fname = Object.entries(files).find(([k]) => k === 'bank_statement')?.[1]?.[0]?.originalname || 'bank.xlsx'
+        console.log(`[upload] AI parsing Bank Statement for company ${cid}...`)
+        const parsed = await parseBankStatementWithAI(buffers['bank_statement'], fname)
+        updates['parsed_bank_statement'] = parsed
+        updates['parsed_bank_statement_at'] = new Date().toISOString()
+        console.log(`[upload] Bank Statement parsed: ${parsed.length} transactions`)
+      }
       if (Object.keys(updates).length) {
         const { data: cur } = await sb.from('files_meta').select('meta').eq('company_id', cid).single()
         await sb.from('files_meta').upsert({ company_id: cid, meta: { ...(cur?.meta ?? {}), ...updates } })
@@ -74,4 +82,5 @@ router.get('/status', requireAuth, async (req: AuthRequest, res) => {
 })
 
 export default router
+
 

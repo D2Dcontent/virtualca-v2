@@ -1,5 +1,6 @@
 ﻿import OpenAI from 'openai'
 import * as XLSX from 'xlsx'
+import pdfParse from 'pdf-parse'
 
 const AUDIT_MODEL = 'anthropic/claude-haiku-4-5'
 const CRITIC_MODEL = 'anthropic/claude-sonnet-4-5'
@@ -227,3 +228,64 @@ ${context}`
   return resp.choices[0].message.content?.trim() ?? ''
 }
 
+
+// ── AI BANK STATEMENT PARSER (PDF or Excel) ───────────────────────────────────
+export async function parseBankStatementWithAI(buffer: Buffer, filename: string): Promise<any[]> {
+  try {
+    let text = ''
+
+    if (filename.toLowerCase().endsWith('.pdf')) {
+      // Extract text from PDF
+      const pdfData = await pdfParse(buffer)
+      text = pdfData.text.slice(0, 8000) // limit to avoid token overflow
+    } else {
+      // Excel bank statement
+      const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][]
+      text = raw.slice(0, 300).map(row =>
+        row.map(c => String(c ?? '').trim()).join(' | ')
+      ).filter(Boolean).join('\n').slice(0, 8000)
+    }
+
+    const system = `You are an expert at reading Indian bank statements (HDFC, ICICI, SBI, Axis, Kotak etc).
+Parse every transaction and return a JSON array.
+
+Return ONLY valid JSON array, no explanation:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "description": "narration/description",
+    "debit": 5000,
+    "credit": 0,
+    "balance": 125000,
+    "ref_no": "reference number if available"
+  }
+]
+
+Rules:
+- date must be YYYY-MM-DD format
+- debit = money going OUT of account (withdrawal, payment)
+- credit = money coming IN to account (deposit, receipt)
+- balance = closing balance after transaction (0 if not shown)
+- Skip header rows, opening balance rows, closing balance rows`
+
+    const client = getClient()
+    const resp = await client.chat.completions.create({
+      model: CRITIC_MODEL,
+      max_tokens: 4000,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: `Parse this bank statement:\n\n${text}` },
+      ],
+    })
+
+    const raw2 = resp.choices[0].message.content?.trim() ?? '[]'
+    const match = raw2.match(/\[[\s\S]*\]/)
+    if (!match) return []
+    return JSON.parse(match[0])
+  } catch (e) {
+    console.error('[parseBankStatementWithAI] error:', e)
+    return []
+  }
+}
