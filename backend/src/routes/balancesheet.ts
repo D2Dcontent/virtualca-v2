@@ -69,13 +69,15 @@ function classifyByName(name: string): { side: 'liability' | 'asset' | null; buc
   // Capital
   if (/capital|owner|proprietor/.test(n)) return { side: 'liability', bucket: 'Equity & Capital' }
 
-  // Expenses (P&L — go to Current Liabilities if credit, Current Assets if debit)
-  if (/expense|rent|salary|wages|commission paid|discount allowed|food|hotel|travel|printing|telephone|electricity|power|repair|maintenance|professional fee|consulta|legal|audit fee|advertisement/.test(n)) {
-    return { side: 'asset', bucket: 'Prepaid & Other Assets' }  // debit balance expenses
+  // Expenses — P&L items, NOT Balance Sheet. Skip entirely.
+  if (/expense|rent paid|salary|wages|commission paid|discount allowed|food exp|hotel exp|travel exp|printing|telephone|electricity|power|repair|maintenance|professional fee|consulta|legal|audit fee|advertisement|marketing|subscription|stationery|petrol|diesel|fuel/.test(n)) {
+    return { side: null, bucket: '' }
   }
 
-  // Income / Revenue
-  if (/income|revenue|sales|receipt|training|service/.test(n)) return { side: 'liability', bucket: 'Equity & Capital' }
+  // Income / Revenue — P&L items, NOT Balance Sheet. Skip entirely.
+  if (/^sales|^income|^revenue|sales account|service income|commission received|interest received|discount received|rent received/.test(n)) {
+    return { side: null, bucket: '' }
+  }
 
   // GST / Tax
   if (/gst|tds|tax|duty|igst|cgst|sgst|tcs/.test(n)) return { side: 'liability', bucket: 'Current Liabilities' }
@@ -83,8 +85,16 @@ function classifyByName(name: string): { side: 'liability' | 'asset' | null; buc
   return { side: null, bucket: '' }
 }
 
+// Tally P&L groups — these should NEVER appear on Balance Sheet
+const PL_GROUPS = ['indirect expenses','direct expenses','indirect incomes','direct incomes',
+  'sales accounts','purchase accounts','sales account','purchase account','income','expenses',
+  'manufacturing expenses','trading account']
+
 function classify(group: string, name: string): { side: 'liability' | 'asset' | null; bucket: string } {
   const g = group.toLowerCase().trim()
+
+  // Skip all P&L groups — these belong in Statement of P&L, not BS
+  if (PL_GROUPS.some(p => g.includes(p))) return { side: null, bucket: '' }
 
   // Try group first
   for (const [k, v] of Object.entries(LIAB_MAP)) {
@@ -272,6 +282,7 @@ Maximum 5 lines. Plain sentences only.`
 router.get('/', requireAuth, async (_req, res) => res.json({}))
 
 export default router
+
 
 
 
