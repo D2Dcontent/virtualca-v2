@@ -1,4 +1,4 @@
-import { Router } from 'express'
+﻿import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { getClient } from '../db/supabase'
 
@@ -6,10 +6,13 @@ const router = Router()
 
 router.get('/', requireAuth, async (req: AuthRequest, res) => {
   const sb = getClient()
-  const { data } = await sb.from('user_company_map')
-    .select('company_id, companies(id, name)')
+  const { data: mapRows } = await sb.from('user_company_map')
+    .select('company_id')
     .eq('user_id', req.userId!)
-  return res.json(data?.map((d: any) => d.companies) ?? [])
+  if (!mapRows?.length) return res.json([])
+  const ids = mapRows.map((r: any) => r.company_id)
+  const { data: cos } = await sb.from('companies').select('id, name').in('id', ids)
+  return res.json(cos ?? [])
 })
 
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
@@ -35,3 +38,4 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
 })
 
 export default router
+
