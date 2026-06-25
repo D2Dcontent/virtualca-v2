@@ -1,6 +1,7 @@
 ﻿import OpenAI from 'openai'
 import * as XLSX from 'xlsx'
-import pdfParse from 'pdf-parse'
+import * as pdfParseModule from 'pdf-parse'
+const pdfParse = (pdfParseModule as any).default ?? pdfParseModule
 
 const AUDIT_MODEL = 'anthropic/claude-haiku-4-5'
 const CRITIC_MODEL = 'anthropic/claude-sonnet-4-5'
@@ -289,3 +290,4 @@ Rules:
     return []
   }
 }
+
